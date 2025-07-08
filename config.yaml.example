@@ -1,0 +1,37 @@
+radarr:
+  url: http://localhost:7878
+  api_key: your-api-key-here
+
+tautulli:
+  enabled: false
+  url: http://localhost:8181
+  api_key: your-tautulli-api-key
+  
+  # Options for watch status checking
+  watch_check:
+    enabled: true
+    min_watch_percent: 85  # Consider watched if > 85% viewed
+
+filter:
+  # Simple example - find movies with a specific tag that have been watched
+  default_expression: tag:"10 - snekkern" AND watched_by:"snekkern"
+  
+  # Named filter presets for common operations
+  presets:
+    old_imports:
+      expression: imported_before:"2023-01-01" AND NOT tag:"keep"
+    cleanup_tagged:
+      expression: tag:"cleanup" OR tag:"remove"
+    user_watched:
+      expression: tag:"10 - snekkern" AND watched_by:"snekkern"
+
+safety:
+  dry_run: true
+  confirm_delete: true
+  # Show details of what will be deleted
+  show_details: true
+
+logging:
+  level: info        # debug, info, warn, error
+  format: console    # console or json
+  color: true        # colorized console output
