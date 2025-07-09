@@ -86,20 +86,20 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 
 	operations = radarr.NewOperations(radarrClient, logger)
 
-	// Create Tautulli client if enabled
-	if cfg.Tautulli.Enabled && cfg.Tautulli.WatchCheck.Enabled {
+	// Create Tautulli client if URL and API key are provided
+	if cfg.Tautulli.URL != "" && cfg.Tautulli.APIKey != "" {
 		tautulliClient, err = tautulli.NewClient(cfg.Tautulli.URL, cfg.Tautulli.APIKey, logger)
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to create Tautulli client, continuing without watch status")
 		} else {
 			operations.SetTautulliClient(tautulliClient)
-			operations.SetMinWatchPercent(cfg.Tautulli.WatchCheck.MinWatchPercent)
+			operations.SetMinWatchPercent(cfg.Tautulli.MinWatchPercent)
 			logger.Info().Msg("Tautulli integration enabled")
 		}
 	}
 
-	// Create Overseerr client if enabled
-	if cfg.Overseerr.Enabled {
+	// Create Overseerr client if URL and API key are provided
+	if cfg.Overseerr.URL != "" && cfg.Overseerr.APIKey != "" {
 		overseerrClient, err = overseerr.NewClient(cfg.Overseerr.URL, cfg.Overseerr.APIKey, logger)
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to create Overseerr client, continuing without request data")
@@ -213,11 +213,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		
 		fmt.Printf("\nFrom filter \"%s\":\n", filterName)
 		for _, movie := range movies {
-			fmt.Printf("• %s (%d)", movie.Title, movie.Year)
-			if movie.Watched {
-				fmt.Printf(" [WATCHED]")
-			}
-			fmt.Println()
+			fmt.Printf("• %s (%d)\n", movie.Title, movie.Year)
 			if cfg.Safety.ShowDetails {
 				if len(movie.TagNames) > 0 {
 					fmt.Printf("  Tags: %s\n", strings.Join(movie.TagNames, ", "))
@@ -316,11 +312,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		
 		fmt.Printf("\nFrom filter \"%s\":\n", filterName)
 		for _, movie := range movies {
-			fmt.Printf("• %s (%d)", movie.Title, movie.Year)
-			if movie.Watched {
-				fmt.Printf(" [WATCHED]")
-			}
-			fmt.Println()
+			fmt.Printf("• %s (%d)\n", movie.Title, movie.Year)
 		}
 	}
 
@@ -395,10 +387,17 @@ func runTest(cmd *cobra.Command, args []string) error {
 	if tautulliClient != nil {
 		fmt.Printf("\nTesting connection to Tautulli at %s...\n", cfg.Tautulli.URL)
 		fmt.Println("✓ Tautulli connection successful!")
-		fmt.Printf("- Watch status checking: %s\n", boolToStatus(cfg.Tautulli.WatchCheck.Enabled))
-		fmt.Printf("- Minimum watch percent: %.0f%%\n", cfg.Tautulli.WatchCheck.MinWatchPercent)
+		fmt.Printf("- Minimum watch percent: %.0f%%\n", cfg.Tautulli.MinWatchPercent)
 	} else {
-		fmt.Println("\nTautulli integration: Disabled")
+		fmt.Println("\nTautulli integration: Not configured")
+	}
+	
+	// Test Overseerr if configured
+	if overseerrClient != nil {
+		fmt.Printf("\nTesting connection to Overseerr at %s...\n", cfg.Overseerr.URL)
+		fmt.Println("✓ Overseerr connection successful!")
+	} else {
+		fmt.Println("\nOverseerr integration: Not configured")
 	}
 
 	return nil

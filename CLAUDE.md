@@ -145,7 +145,7 @@ When modifying API interactions:
 The tool expects sensitive API keys in `config.yaml` (gitignored). Example configuration is in `config.yaml.example`. 
 
 Optional integrations:
-- Tautulli integration can be disabled by setting `tautulli.enabled: false`
-- Overseerr integration can be disabled by setting `overseerr.enabled: false`
+- Tautulli integration is enabled automatically when both `url` and `api_key` are provided
+- Overseerr integration is enabled automatically when both `url` and `api_key` are provided
 
-Both integrations operate independently and can be enabled/disabled as needed.
+Both integrations operate independently - just leave the configuration empty if you don't want to use them.

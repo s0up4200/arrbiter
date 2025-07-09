@@ -75,7 +75,10 @@ func (o *Operations) GetAllMovies(ctx context.Context) ([]MovieInfo, error) {
 	var results []MovieInfo
 	for _, movie := range movies {
 		info := o.client.GetMovieInfo(movie, tags)
-		results = append(results, info)
+		// Only include movies with imported files
+		if !info.FileImported.IsZero() {
+			results = append(results, info)
+		}
 	}
 	
 	// Enrich with watch status if Tautulli is configured
@@ -136,9 +139,13 @@ func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo
 		}
 	}
 	
-	// Filter movies
+	// Filter movies - only consider movies with imported files
 	var results []MovieInfo
 	for _, info := range movieInfos {
+		// Skip movies without imported files
+		if info.FileImported.IsZero() {
+			continue
+		}
 		if filterFunc(info) {
 			results = append(results, info)
 		}
@@ -308,14 +315,12 @@ func (o *Operations) printMoviesToDelete(movies []MovieInfo) {
 	
 	var watchedCount int
 	for _, movie := range movies {
-		fmt.Printf("• %s (%d)", movie.Title, movie.Year)
+		fmt.Printf("• %s (%d)\n", movie.Title, movie.Year)
 		
-		// Show watch status if available
+		// Track watch status for warning
 		if movie.Watched {
-			fmt.Printf(" [WATCHED]")
 			watchedCount++
 		}
-		fmt.Println()
 		
 		if len(movie.TagNames) > 0 {
 			fmt.Printf("  Tags: %s\n", strings.Join(movie.TagNames, ", "))

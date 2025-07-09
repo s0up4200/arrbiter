@@ -35,21 +35,13 @@ type LoggingConfig struct {
 
 // TautulliConfig holds Tautulli API connection details and watch settings
 type TautulliConfig struct {
-	Enabled    bool             `mapstructure:"enabled"`
-	URL        string           `mapstructure:"url"`
-	APIKey     string           `mapstructure:"api_key"`
-	WatchCheck WatchCheckConfig `mapstructure:"watch_check"`
-}
-
-// WatchCheckConfig contains settings for watch status checking
-type WatchCheckConfig struct {
-	Enabled         bool    `mapstructure:"enabled"`
+	URL             string  `mapstructure:"url"`
+	APIKey          string  `mapstructure:"api_key"`
 	MinWatchPercent float64 `mapstructure:"min_watch_percent"`
 }
 
 // OverseerrConfig holds Overseerr API connection details
 type OverseerrConfig struct {
-	Enabled bool   `mapstructure:"enabled"`
-	URL     string `mapstructure:"url"`
-	APIKey  string `mapstructure:"api_key"`
+	URL    string `mapstructure:"url"`
+	APIKey string `mapstructure:"api_key"`
 }

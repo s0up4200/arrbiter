@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
@@ -25,19 +27,23 @@ func Load(configPath string) (*Config, error) {
 		// Check current directory first
 		v.AddConfigPath(".")
 
-		// Check home directory
+		// Check XDG config directory and legacy locations
 		if home, err := os.UserHomeDir(); err == nil {
+			v.AddConfigPath(filepath.Join(home, ".config", "arrbiter"))
 			v.AddConfigPath(filepath.Join(home, ".arrbiter"))
 		}
-
-		// Check /etc
-		v.AddConfigPath("/etc/arrbiter/")
 	}
 
 	// Read config file
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			return nil, fmt.Errorf("config file not found: %w", err)
+			// Try to create default config
+			if err := createDefaultConfig(); err != nil {
+				return nil, fmt.Errorf("config file not found and unable to create default: %w", err)
+			}
+			log.Info().Msg("Created default config file at ~/.config/arrbiter/config.yaml")
+			log.Info().Msg("Please edit it with your API keys and run the command again")
+			return nil, fmt.Errorf("config file created at ~/.config/arrbiter/config.yaml - please edit it with your API keys")
 		}
 		return nil, fmt.Errorf("error reading config: %w", err)
 	}
@@ -59,6 +65,9 @@ func Load(configPath string) (*Config, error) {
 func setDefaults(v *viper.Viper) {
 	// Radarr defaults
 	v.SetDefault("radarr.url", "http://localhost:7878")
+
+	// Tautulli defaults
+	v.SetDefault("tautulli.min_watch_percent", 85.0)
 
 	// Safety defaults
 	v.SetDefault("safety.dry_run", true)
@@ -99,6 +108,94 @@ func validate(cfg *Config) error {
 	}
 	if !validFormats[cfg.Logging.Format] {
 		return fmt.Errorf("invalid logging format: %s", cfg.Logging.Format)
+	}
+
+	return nil
+}
+
+// createDefaultConfig creates a default config file in ~/.config/arrbiter/
+func createDefaultConfig() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("unable to get home directory: %w", err)
+	}
+
+	// Create config directory
+	configDir := filepath.Join(home, ".config", "arrbiter")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("unable to create config directory: %w", err)
+	}
+
+	// Path to the new config file
+	configPath := filepath.Join(configDir, "config.yaml")
+
+	// Check if config already exists
+	if _, err := os.Stat(configPath); err == nil {
+		return fmt.Errorf("config file already exists at %s", configPath)
+	}
+
+	// Try to find config.yaml.example in common locations
+	examplePaths := []string{
+		"config.yaml.example",
+		"./config.yaml.example",
+		filepath.Join(home, ".config", "arrbiter", "config.yaml.example"),
+		"/usr/share/arrbiter/config.yaml.example",
+		"/usr/local/share/arrbiter/config.yaml.example",
+	}
+
+	var sourceFile *os.File
+	for _, path := range examplePaths {
+		file, err := os.Open(path)
+		if err == nil {
+			sourceFile = file
+			break
+		}
+	}
+
+	if sourceFile == nil {
+		// Create a minimal default config
+		defaultConfig := `radarr:
+  url: http://localhost:7878
+  api_key: your-api-key-here
+
+tautulli:
+  url: http://localhost:8181
+  api_key: your-tautulli-api-key
+  min_watch_percent: 85  # Consider watched if > 85% viewed
+
+overseerr:
+  url: http://localhost:5055
+  api_key: your-overseerr-api-key
+
+filter:
+  # Example filters - customize these for your needs
+  old_unwatched: Added < yearsAgo(1) and not Watched
+  cleanup_tagged: hasTag("cleanup") or hasTag("remove")
+
+safety:
+  dry_run: true
+  confirm_delete: true
+  show_details: true
+
+logging:
+  level: info
+  format: console
+  color: true
+`
+		return os.WriteFile(configPath, []byte(defaultConfig), 0644)
+	}
+	defer sourceFile.Close()
+
+	// Create destination file
+	destFile, err := os.Create(configPath)
+	if err != nil {
+		return fmt.Errorf("unable to create config file: %w", err)
+	}
+	defer destFile.Close()
+
+	// Copy the content
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return fmt.Errorf("unable to copy config content: %w", err)
 	}
 
 	return nil

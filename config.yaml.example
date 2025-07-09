@@ -3,17 +3,11 @@ radarr:
   api_key: your-api-key-here
 
 tautulli:
-  enabled: false
   url: http://localhost:8181
   api_key: your-tautulli-api-key
-  
-  # Options for watch status checking
-  watch_check:
-    enabled: true
-    min_watch_percent: 85  # Consider watched if > 85% viewed
+  min_watch_percent: 85  # Consider watched if > 85% viewed
 
 overseerr:
-  enabled: false
   url: http://localhost:5055
   api_key: your-overseerr-api-key
 

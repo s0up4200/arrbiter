@@ -77,21 +77,24 @@ go build
      url: http://localhost:7878
      api_key: your-api-key-here
    
+   # Optional: Add Tautulli for watch tracking
    tautulli:
-     enabled: true
      url: http://localhost:8181
      api_key: your-tautulli-api-key
+     min_watch_percent: 85  # Consider watched if >85% viewed
      
+   # Optional: Add Overseerr for request tracking
    overseerr:
-     enabled: true
      url: http://localhost:5055
      api_key: your-overseerr-api-key
    ```
 
 The tool will look for `config.yaml` in:
 - Current directory
+- `~/.config/arrbiter/`
 - `~/.arrbiter/`
-- `/etc/arrbiter/`
+
+If no config file is found, a default one will be created at `~/.config/arrbiter/config.yaml`.
 
 ## Usage
 
@@ -153,7 +156,6 @@ IMDBID         # string - IMDb identifier (e.g., "tt1234567")
 TMDBID         # int64 - The Movie Database ID
 
 # Status Properties
-HasFile        # bool - Whether movie has a file on disk
 Watched        # bool - Whether movie has been watched by any user
 WatchCount     # int - Total number of times watched by all users
 WatchProgress  # float64 - Maximum watch progress percentage across all users
@@ -257,10 +259,6 @@ has_tmdb: TMDBID > 0
 #### Status and Watch Filtering
 
 ```yaml
-# File status
-missing_files: not HasFile
-has_files: HasFile
-
 # Watch status (any user)
 watched_movies: Watched
 unwatched_movies: not Watched
@@ -547,13 +545,9 @@ When Tautulli is enabled, the tool will check if movies have been watched before
 
 ```yaml
 tautulli:
-  enabled: true
   url: http://localhost:8181
   api_key: your-tautulli-api-key
-  
-  watch_check:
-    enabled: true
-    min_watch_percent: 85  # Consider watched if >85% viewed
+  min_watch_percent: 85  # Consider watched if >85% viewed
 ```
 
 ### How It Works
@@ -578,7 +572,6 @@ When Overseerr is enabled, the tool will retrieve request information for movies
 
 ```yaml
 overseerr:
-  enabled: true
   url: http://localhost:5055
   api_key: your-overseerr-api-key
 ```
