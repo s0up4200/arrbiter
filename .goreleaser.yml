@@ -96,6 +96,20 @@ changelog:
     - title: '🔄 Other Changes'
       order: 999
 
+homebrew_casks:
+  - name: arrbiter
+    folder: Casks
+    repository:
+      owner: s0up4200
+      name: arrbiter
+    commit_author:
+      name: goreleaserbot
+      email: goreleaserbot@users.noreply.github.com
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    homepage: "https://github.com/s0up4200/arrbiter"
+    description: "Your media library's arbiter of taste - A CLI tool for managing Radarr movies with advanced filtering"
+    license: "MIT"
+
 release:
   prerelease: auto
   header: |
@@ -107,6 +121,12 @@ release:
     **Full Changelog**: https://github.com/s0up4200/arrbiter/compare/{{ .PreviousTag }}...{{ .Tag }}
 
     ## 📦 Installation
+
+    ### Homebrew
+    ```bash
+    brew tap s0up4200/arrbiter
+    brew install arrbiter
+    ```
 
     ### Binary
     Download the appropriate binary for your platform from the assets below.

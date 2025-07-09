@@ -16,11 +16,20 @@ A CLI tool to manage and clean up Radarr movies based on advanced filter criteri
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew tap s0up4200/arrbiter
+brew install arrbiter
+```
+
+### Go Install
+
 ```bash
 go install github.com/s0up4200/arrbiter@latest
 ```
 
-Or build from source:
+### Build from source
 
 ```bash
 git clone https://github.com/s0up4200/arrbiter.git
