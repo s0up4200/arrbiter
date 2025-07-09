@@ -3,6 +3,7 @@ module github.com/soup/radarr-cleanup
 go 1.24.4
 
 require (
+	github.com/expr-lang/expr v1.17.5
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1

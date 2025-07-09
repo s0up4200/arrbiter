@@ -25,8 +25,6 @@ var (
 	operations     *radarr.Operations
 
 	// Command flags
-	filterExpr    string
-	preset        string
 	dryRun        bool
 	noConfirm     bool
 	deleteFiles   bool
@@ -106,6 +104,8 @@ func setupLogger(cfg config.LoggingConfig) zerolog.Logger {
 	// Set log level
 	level := zerolog.InfoLevel
 	switch strings.ToLower(cfg.Level) {
+	case "trace":
+		level = zerolog.TraceLevel
 	case "debug":
 		level = zerolog.DebugLevel
 	case "warn":
@@ -140,61 +140,86 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	listCmd.Flags().StringVarP(&filterExpr, "filter", "f", "", "filter expression")
-	listCmd.Flags().StringVarP(&preset, "preset", "p", "", "use a preset filter from config")
+	// No filter flags needed anymore
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	// Determine filter expression
-	expr, err := getFilterExpression()
-	if err != nil {
-		return err
-	}
-
-	logger.Info().Str("filter", expr).Msg("Searching movies")
-
-	// Parse filter
-	filterFunc, err := filter.ParseAndCreateFilter(expr)
-	if err != nil {
-		return fmt.Errorf("invalid filter expression: %w", err)
-	}
-
-	// Search movies
-	ctx := context.Background()
-	movies, err := operations.SearchMovies(ctx, filterFunc)
-	if err != nil {
-		return err
-	}
-
-	// Display results
-	if len(movies) == 0 {
-		fmt.Println("No movies found matching the filter criteria.")
+	// Check if any filters are defined
+	if len(cfg.Filter) == 0 {
+		fmt.Println("No filters defined in configuration.")
 		return nil
 	}
 
-	fmt.Printf("\nFound %d movies:\n", len(movies))
+	logger.Info().Int("filter_count", len(cfg.Filter)).Msg("Processing filters")
+
+	// Get all movies once
+	ctx := context.Background()
+	allMovies, err := operations.GetAllMovies(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get movies: %w", err)
+	}
+
+	// Track which movies match which filters
+	moviesByFilter := make(map[string][]radarr.MovieInfo)
+	matchedMovies := make(map[int64]bool) // Track unique movies by ID
+
+	// Process each filter
+	for filterName, filterExpr := range cfg.Filter {
+		logger.Debug().Str("filter", filterName).Str("expression", filterExpr).Msg("Processing filter")
+		
+		// Parse filter
+		filterFunc, err := filter.ParseAndCreateFilter(filterExpr)
+		if err != nil {
+			logger.Error().Err(err).Str("filter", filterName).Msg("Invalid filter expression")
+			continue
+		}
+
+		// Find matching movies
+		for _, movie := range allMovies {
+			if filterFunc(movie) {
+				moviesByFilter[filterName] = append(moviesByFilter[filterName], movie)
+				matchedMovies[movie.ID] = true
+			}
+		}
+	}
+
+	// Display results
+	if len(matchedMovies) == 0 {
+		fmt.Println("No movies found matching any filter criteria.")
+		return nil
+	}
+
+	fmt.Printf("\nFound %d movies:\n", len(matchedMovies))
 	fmt.Println(strings.Repeat("-", 80))
 
-	for _, movie := range movies {
-		fmt.Printf("• %s (%d)", movie.Title, movie.Year)
-		if movie.Watched {
-			fmt.Printf(" [WATCHED]")
+	// Display movies grouped by filter
+	for filterName, movies := range moviesByFilter {
+		if len(movies) == 0 {
+			continue
 		}
-		fmt.Println()
-		if cfg.Safety.ShowDetails {
-			if len(movie.TagNames) > 0 {
-				fmt.Printf("  Tags: %s\n", strings.Join(movie.TagNames, ", "))
+		
+		fmt.Printf("\nFrom filter \"%s\":\n", filterName)
+		for _, movie := range movies {
+			fmt.Printf("• %s (%d)", movie.Title, movie.Year)
+			if movie.Watched {
+				fmt.Printf(" [WATCHED]")
 			}
-			fmt.Printf("  Added: %s\n", movie.Added.Format("2006-01-02"))
-			if !movie.FileImported.IsZero() {
-				fmt.Printf("  Imported: %s\n", movie.FileImported.Format("2006-01-02"))
-			}
-			if movie.WatchCount > 0 {
-				fmt.Printf("  Watch Count: %d", movie.WatchCount)
-				if !movie.LastWatched.IsZero() {
-					fmt.Printf(" (Last: %s)", movie.LastWatched.Format("2006-01-02"))
+			fmt.Println()
+			if cfg.Safety.ShowDetails {
+				if len(movie.TagNames) > 0 {
+					fmt.Printf("  Tags: %s\n", strings.Join(movie.TagNames, ", "))
 				}
-				fmt.Println()
+				fmt.Printf("  Added: %s\n", movie.Added.Format("2006-01-02"))
+				if !movie.FileImported.IsZero() {
+					fmt.Printf("  Imported: %s\n", movie.FileImported.Format("2006-01-02"))
+				}
+				if movie.WatchCount > 0 {
+					fmt.Printf("  Watch Count: %d", movie.WatchCount)
+					if !movie.LastWatched.IsZero() {
+						fmt.Printf(" (Last: %s)", movie.LastWatched.Format("2006-01-02"))
+					}
+					fmt.Println()
+				}
 			}
 		}
 	}
@@ -211,45 +236,91 @@ var deleteCmd = &cobra.Command{
 }
 
 func init() {
-	deleteCmd.Flags().StringVarP(&filterExpr, "filter", "f", "", "filter expression")
-	deleteCmd.Flags().StringVarP(&preset, "preset", "p", "", "use a preset filter from config")
 	deleteCmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "skip confirmation prompt")
 	deleteCmd.Flags().BoolVar(&deleteFiles, "delete-files", true, "also delete movie files from disk")
 	deleteCmd.Flags().BoolVar(&ignoreWatched, "ignore-watched", false, "delete movies even if they have been watched")
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
-	// Determine filter expression
-	expr, err := getFilterExpression()
-	if err != nil {
-		return err
+	// Check if any filters are defined
+	if len(cfg.Filter) == 0 {
+		fmt.Println("No filters defined in configuration.")
+		return nil
 	}
 
-	logger.Info().Str("filter", expr).Msg("Searching movies to delete")
+	logger.Info().Int("filter_count", len(cfg.Filter)).Msg("Processing filters for deletion")
 
-	// Parse filter
-	filterFunc, err := filter.ParseAndCreateFilter(expr)
-	if err != nil {
-		return fmt.Errorf("invalid filter expression: %w", err)
-	}
-
-	// Search movies
+	// Get all movies once
 	ctx := context.Background()
-	movies, err := operations.SearchMovies(ctx, filterFunc)
+	allMovies, err := operations.GetAllMovies(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get movies: %w", err)
+	}
+
+	// Track which movies match which filters
+	moviesByFilter := make(map[string][]radarr.MovieInfo)
+	uniqueMovies := make(map[int64]radarr.MovieInfo) // Track unique movies by ID
+	
+	// Process each filter
+	for filterName, filterExpr := range cfg.Filter {
+		logger.Debug().Str("filter", filterName).Str("expression", filterExpr).Msg("Processing filter")
+		
+		// Parse filter
+		filterFunc, err := filter.ParseAndCreateFilter(filterExpr)
+		if err != nil {
+			logger.Error().Err(err).Str("filter", filterName).Msg("Invalid filter expression")
+			continue
+		}
+
+		// Find matching movies
+		for _, movie := range allMovies {
+			if filterFunc(movie) {
+				moviesByFilter[filterName] = append(moviesByFilter[filterName], movie)
+				uniqueMovies[movie.ID] = movie
+			}
+		}
+	}
+
+	// Convert unique movies to slice
+	var moviesToDelete []radarr.MovieInfo
+	for _, movie := range uniqueMovies {
+		moviesToDelete = append(moviesToDelete, movie)
+	}
+
+	if len(moviesToDelete) == 0 {
+		fmt.Println("No movies found matching any filter criteria.")
+		return nil
+	}
+
+	// Display what will be deleted, grouped by filter
+	fmt.Printf("\nFound %d movies to delete:\n", len(moviesToDelete))
+	fmt.Println(strings.Repeat("-", 80))
+	
+	for filterName, movies := range moviesByFilter {
+		if len(movies) == 0 {
+			continue
+		}
+		
+		fmt.Printf("\nFrom filter \"%s\":\n", filterName)
+		for _, movie := range movies {
+			fmt.Printf("• %s (%d)", movie.Title, movie.Year)
+			if movie.Watched {
+				fmt.Printf(" [WATCHED]")
+			}
+			fmt.Println()
+		}
 	}
 
 	// Check for watched movies if not ignoring
 	if !ignoreWatched {
 		var watchedCount int
-		for _, movie := range movies {
+		for _, movie := range moviesToDelete {
 			if movie.Watched {
 				watchedCount++
 			}
 		}
 		if watchedCount > 0 && cfg.Safety.ConfirmDelete && !noConfirm {
-			fmt.Printf("\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(movies))
+			fmt.Printf("\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(moviesToDelete))
 			fmt.Printf("Are you sure you want to continue? Use --ignore-watched to bypass this check. [y/N]: ")
 			var response string
 			fmt.Scanln(&response)
@@ -267,7 +338,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		ConfirmDelete: cfg.Safety.ConfirmDelete && !noConfirm,
 	}
 
-	return operations.DeleteMovies(ctx, movies, deleteOpts)
+	return operations.DeleteMovies(ctx, moviesToDelete, deleteOpts)
 }
 
 // testCmd represents the test command
@@ -327,23 +398,3 @@ func boolToStatus(b bool) string {
 	return "Disabled"
 }
 
-// getFilterExpression determines the filter expression to use
-func getFilterExpression() (string, error) {
-	// Priority: command line filter > preset > default
-	if filterExpr != "" {
-		return filterExpr, nil
-	}
-
-	if preset != "" {
-		if presetFilter, ok := cfg.Filter.Presets[preset]; ok {
-			return presetFilter.Expression, nil
-		}
-		return "", fmt.Errorf("preset '%s' not found in config", preset)
-	}
-
-	if cfg.Filter.DefaultExpression != "" {
-		return cfg.Filter.DefaultExpression, nil
-	}
-
-	return "", fmt.Errorf("no filter expression specified")
-}

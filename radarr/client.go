@@ -103,6 +103,9 @@ type MovieInfo struct {
 	WatchProgress float64
 	// Per-user watch data
 	UserWatchData map[string]*UserWatchInfo
+	// Rating data
+	Ratings    map[string]float64 // Map of source -> rating value (e.g. "imdb" -> 7.5)
+	Popularity float64
 }
 
 // UserWatchInfo contains watch information for a specific user
@@ -128,6 +131,8 @@ func (c *Client) GetMovieInfo(movie *radarr.Movie, tags []*starr.Tag) MovieInfo 
 		Added:         movie.Added,
 		HasFile:       movie.HasFile,
 		UserWatchData: make(map[string]*UserWatchInfo),
+		Ratings:       make(map[string]float64),
+		Popularity:    movie.Popularity,
 	}
 	
 	// Map tag IDs to names
@@ -147,6 +152,15 @@ func (c *Client) GetMovieInfo(movie *radarr.Movie, tags []*starr.Tag) MovieInfo 
 		info.MovieFile = movie.MovieFile
 		if movie.MovieFile.DateAdded.IsZero() == false {
 			info.FileImported = movie.MovieFile.DateAdded
+		}
+	}
+	
+	// Extract ratings
+	if movie.Ratings != nil {
+		for source, rating := range movie.Ratings {
+			if rating.Value > 0 {
+				info.Ratings[source] = rating.Value
+			}
 		}
 	}
 	

@@ -50,6 +50,38 @@ func (o *Operations) SetMinWatchPercent(percent float64) {
 	o.minWatchPercent = percent
 }
 
+// GetAllMovies returns all movies with enriched data
+func (o *Operations) GetAllMovies(ctx context.Context) ([]MovieInfo, error) {
+	// Get all movies
+	movies, err := o.client.GetAllMovies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get all tags for mapping
+	tags, err := o.client.GetTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Convert to MovieInfo with tags
+	var results []MovieInfo
+	for _, movie := range movies {
+		info := o.client.GetMovieInfo(movie, tags)
+		results = append(results, info)
+	}
+	
+	// Enrich with watch status if Tautulli is configured
+	if o.tautulliClient != nil {
+		o.logger.Debug().Msg("Fetching watch status from Tautulli")
+		if err := o.enrichWithWatchStatus(ctx, results); err != nil {
+			o.logger.Warn().Err(err).Msg("Failed to fetch watch status from Tautulli")
+		}
+	}
+	
+	return results, nil
+}
+
 // SearchMovies searches for movies matching the filter expression
 func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo) bool) ([]MovieInfo, error) {
 	// Get all movies

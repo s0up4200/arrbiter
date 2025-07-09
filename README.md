@@ -51,20 +51,31 @@ The tool will look for `config.yaml` in:
 
 ## Usage
 
-### Quick Start - Simple Use Case
+### Quick Start
 
-If you want to delete movies with a specific Radarr tag that a user has already watched:
+Define your filters in `config.yaml`:
+
+```yaml
+filter:
+  mathis: hasTag("trash") and watchedBy("myttolini")
+  john: hasTag("action") and WatchCount > 5
+  old_unwatched: Added < yearsAgo(1) and not Watched
+```
+
+Then run the tool:
 
 ```bash
-# List movies with tag "01 - snekkern" that user "snekkern" has watched
-radarr-cleanup list --filter 'tag:"01 - snekkern" AND watched_by:"snekkern"'
+# List all movies matching ANY of your filters
+radarr-cleanup list
 
 # Delete them (dry-run first to see what would be deleted)
-radarr-cleanup delete --filter 'tag:"01 - snekkern" AND watched_by:"snekkern"'
+radarr-cleanup delete
 
 # Actually delete them
-radarr-cleanup delete --filter 'tag:"01 - snekkern" AND watched_by:"snekkern"' --no-dry-run
+radarr-cleanup delete --no-dry-run
 ```
+
+The tool will process ALL filters defined in your config and show results grouped by which filter matched.
 
 ### Other Examples
 
@@ -73,76 +84,293 @@ Test connection:
 radarr-cleanup test
 ```
 
-List unwatched movies with a tag:
+Skip confirmation when deleting:
 ```bash
-radarr-cleanup list --filter 'tag:"01 - snekkern" AND NOT watched_by:"snekkern"'
+radarr-cleanup delete --no-confirm
 ```
 
-Use a preset from config:
+Keep files on disk when deleting from Radarr:
 ```bash
-radarr-cleanup list --preset snekkern_watched
-```
-
-Delete old imports nobody has watched:
-```bash
-radarr-cleanup delete --filter 'imported_before:"2023-01-01" AND watched:false'
+radarr-cleanup delete --delete-files=false
 ```
 
 ## Filter Expression Syntax
 
-### Basic Filters
+The tool uses the [expr](https://github.com/expr-lang/expr) expression language for filtering, which provides a powerful and flexible syntax.
 
-- **Tag filter**: `tag:"tagname"`
-- **Date added**: `added_before:"2023-01-01"` or `added_after:"2023-01-01"`
-- **Date imported**: `imported_before:"2023-01-01"` or `imported_after:"2023-01-01"`
-- **Watch status**: `watched:true` or `watched:false` (any user)
-- **Watch count**: `watch_count:>0` or `watch_count:>=2` (total across all users)
-- **Watched by user**: `watched_by:"username"` (specific user has watched)
-- **User watch count**: `watch_count_by:"username">3` (specific user watched N times)
+### Available Movie Properties
 
-### Logical Operators
+```yaml
+# Basic Properties
+Title          # string - Movie title
+Year           # int - Release year
+Path           # string - File path on disk
+IMDBID         # string - IMDb identifier (e.g., "tt1234567")
+TMDBID         # int64 - The Movie Database ID
 
-- **AND**: Combine multiple conditions that must all be true
-- **OR**: At least one condition must be true
-- **NOT**: Negate a condition
-- **Parentheses**: Group conditions for complex logic
+# Status Properties
+HasFile        # bool - Whether movie has a file on disk
+Watched        # bool - Whether movie has been watched by any user
+WatchCount     # int - Total number of times watched by all users
+WatchProgress  # float64 - Maximum watch progress percentage across all users
+
+# Date Properties
+Added          # time.Time - When movie was added to Radarr
+FileImported   # time.Time - When the file was imported
+LastWatched    # time.Time - When movie was last watched by any user
+
+# Tag Properties
+Tags           # []string - List of tag names (not IDs)
+TagNames       # []string - Same as Tags (for compatibility)
+
+# User-Specific Data
+UserWatchData  # map[string]*UserWatchInfo - Per-user watch information
+
+# Rating Properties
+Ratings        # map[string]float64 - Map of rating source to value
+Popularity     # float64 - Movie popularity score
+```
+
+### Helper Functions
+
+```yaml
+# Tag Functions
+hasTag("tagname")              # Check if movie has a specific tag
+
+# User Watch Functions
+watchedBy("username")          # Check if specific user has watched (>85% by default)
+watchCountBy("username")       # Get watch count for specific user
+watchProgressBy("username")    # Get max progress percentage for user
+
+# Date Functions
+daysSince(date)                # Days since a given date
+daysAgo(n)                     # Date n days ago
+monthsAgo(n)                   # Date n months ago  
+yearsAgo(n)                    # Date n years ago
+parseDate("2023-01-01")        # Parse date string to time.Time
+now()                          # Current time
+
+# String Functions
+contains(str, substr)          # Case-insensitive substring search
+startsWith(str, prefix)        # Check string prefix (case-insensitive)
+endsWith(str, suffix)          # Check string suffix (case-insensitive)
+lower(str)                     # Convert to lowercase
+upper(str)                     # Convert to uppercase
+
+# Rating Functions
+imdbRating()                   # Get IMDB rating (0 if not available)
+tmdbRating()                   # Get TMDB rating (0 if not available)
+rottenTomatoesRating()         # Get Rotten Tomatoes percentage (0 if not available)
+metacriticRating()             # Get Metacritic score (0 if not available)
+hasRating("source")            # Check if rating from source exists
+getRating("source")            # Get rating value from any source (0 if not available)
+```
 
 ### Examples
 
-```bash
-# Movies with specific tag
-tag:"01 - snekkern"
+#### Basic Property Filtering
 
-# Movies added after a date
-added_after:"2024-01-01"
+```yaml
+# Filter by title
+title_match: contains(Title, "Star Wars")
+sequel_movies: contains(Title, "2") or contains(Title, "II")
+the_movies: startsWith(Title, "The")
 
-# Complex filter with AND
-tag:"01 - snekkern" AND added_after:"2024-01-01"
+# Filter by year
+old_movies: Year < 2000
+recent_movies: Year >= 2020
+specific_decade: Year >= 1980 and Year < 1990
 
-# Multiple conditions with OR
-(tag:"cleanup" AND imported_before:"2023-12-31") OR (tag:"archive" AND added_before:"2023-06-01")
+# Filter by file path
+mkv_files: endsWith(Path, ".mkv")
+specific_folder: contains(Path, "/movies/action/")
 
-# Negation
-NOT tag:"keep" AND added_before:"2023-01-01"
-
-# Movies without specific tag
-tag!:"keep"
-
-# Unwatched movies with specific tag
-tag:"cleanup" AND watched:false
-
-# Movies watched more than once
-watch_count:>1
-
-# Movies watched by specific user
-tag:"01 - snekkern" AND watched_by:"snekkern"
-
-# Movies NOT watched by a specific user
-NOT watched_by:"guest"
-
-# Movies watched by user more than 3 times
-watch_count_by:"poweruser">3
+# Filter by IDs
+specific_imdb: IMDBID == "tt0111161"  # The Shawshank Redemption
+has_tmdb: TMDBID > 0
 ```
+
+#### Status and Watch Filtering
+
+```yaml
+# File status
+missing_files: not HasFile
+has_files: HasFile
+
+# Watch status (any user)
+watched_movies: Watched
+unwatched_movies: not Watched
+popular_movies: WatchCount > 3
+barely_watched: WatchProgress < 20
+
+# Specific user filtering
+user_watched: watchedBy("john")
+user_not_watched: not watchedBy("john")
+user_watch_count: watchCountBy("john") >= 2
+user_partial: watchProgressBy("john") > 0 and watchProgressBy("john") < 85
+
+# Multiple users
+either_user: watchedBy("john") or watchedBy("jane")
+both_users: watchedBy("john") and watchedBy("jane")
+john_not_jane: watchedBy("john") and not watchedBy("jane")
+```
+
+#### Date Filtering
+
+```yaml
+# Using specific dates
+old_additions: Added < parseDate("2023-01-01")
+recent_additions: Added > parseDate("2024-06-01")
+date_range: Added >= parseDate("2024-01-01") and Added <= parseDate("2024-12-31")
+
+# Using relative dates
+last_30_days: Added > daysAgo(30)
+last_week: daysSince(Added) <= 7
+six_months_old: Added < monthsAgo(6)
+over_year_old: Added < yearsAgo(1)
+
+# File import dates
+recent_imports: FileImported > daysAgo(7)
+old_imports: daysSince(FileImported) > 365
+never_imported: FileImported.IsZero()  # No file imported
+
+# Last watched dates
+recently_watched: daysSince(LastWatched) < 30
+not_watched_year: daysSince(LastWatched) > 365
+```
+
+#### Tag Filtering
+
+```yaml
+# Single tag
+action_movies: hasTag("action")
+no_action: not hasTag("action")
+
+# Multiple tags (OR)
+action_or_thriller: hasTag("action") or hasTag("thriller")
+
+# Multiple tags (AND)
+action_and_good: hasTag("action") and hasTag("recommended")
+
+# Tag combinations
+user_tags: hasTag("10 - john") and not hasTag("keep")
+cleanup_tags: hasTag("cleanup") or hasTag("remove") or hasTag("delete")
+
+# Using array syntax (alternative)
+has_any_tag: len(Tags) > 0
+many_tags: len(Tags) >= 3
+```
+
+#### String Operations
+
+```yaml
+# Case-insensitive searches
+marvel_movies: contains(Title, "marvel") or contains(Title, "avengers")
+batman_movies: contains(lower(Title), "batman")
+
+# Path operations
+linux_isos: contains(Path, "linux") and endsWith(Path, ".iso")
+downloads_folder: startsWith(Path, "/downloads/")
+
+# Title patterns
+numbered_sequels: Title matches ".*\\s\\d+$"  # Ends with number
+year_in_title: Title matches ".*\\(\\d{4}\\)"  # Contains year in parentheses
+```
+
+#### Complex Real-World Examples
+
+```yaml
+# Old unwatched movies with specific tags
+cleanup_candidates: |
+  hasTag("cleanup") and 
+  not Watched and 
+  Added < monthsAgo(6)
+
+# Movies partially watched by guests
+guest_abandoned: |
+  watchProgressBy("guest") > 10 and 
+  watchProgressBy("guest") < 70 and
+  daysSince(LastWatched) > 30
+
+# High quality files nobody watches
+wasted_space: |
+  contains(Path, "2160p") and 
+  WatchCount == 0 and 
+  Added < monthsAgo(3)
+
+# Kids movies adults watched
+kids_watched_by_adults: |
+  hasTag("kids") and 
+  (watchedBy("mom") or watchedBy("dad")) and
+  not watchedBy("child1")
+
+# Incomplete series
+incomplete_series: |
+  (contains(Title, "Part 1") or contains(Title, "Chapter 1")) and
+  not Watched
+
+# Foreign films with low engagement  
+foreign_unwatched: |
+  not contains(Path, "/english/") and
+  WatchCount < 2 and
+  daysSince(Added) > 60
+
+# Recently added but quickly abandoned
+quick_abandons: |
+  daysSince(Added) < 30 and
+  WatchProgress > 0 and
+  WatchProgress < 30 and
+  daysSince(LastWatched) > 7
+
+# Using Movie prefix for direct access
+movie_prefix: Movie.Title == "The Matrix" and Movie.Year == 1999
+```
+
+#### Rating-Based Filtering
+
+```yaml
+# High quality movies only
+high_rated: imdbRating() >= 7.5 and rottenTomatoesRating() >= 80
+
+# Low rated movies to clean up
+low_rated: imdbRating() < 5.0 or metacriticRating() < 40
+
+# Movies with no ratings
+unrated: not hasRating("imdb") and not hasRating("tmdb")
+
+# Popular movies
+popular: Popularity > 100 and tmdbRating() > 7
+
+# Critics vs audience disagreement
+controversial: abs(rottenTomatoesRating() - imdbRating() * 10) > 30
+
+# Highly rated but unwatched
+highly_rated_unwatched: |
+  imdbRating() >= 8.0 and
+  not Watched and
+  Added < monthsAgo(3)
+
+# Low IMDB but high RT score (critical darlings)
+critical_darlings: |
+  imdbRating() < 6.5 and
+  rottenTomatoesRating() > 85
+
+# Check specific rating exists
+has_metacritic: hasRating("metacritic")
+
+# Use any rating source dynamically
+any_high_rating: |
+  getRating("imdb") > 8 or
+  getRating("tmdb") > 8 or
+  getRating("metacritic") > 80
+
+# Combine ratings with other properties
+good_action_movies: |
+  hasTag("action") and
+  imdbRating() >= 7.0 and
+  rottenTomatoesRating() >= 70
+```
+
 
 ## Safety Features
 
@@ -159,12 +387,9 @@ watch_count_by:"poweruser">3
 - `--dry-run, -d`: Perform a dry run without making changes
 
 ### List Command
-- `--filter, -f`: Filter expression
-- `--preset, -p`: Use a preset filter from config
+No additional options - processes all filters from config
 
 ### Delete Command
-- `--filter, -f`: Filter expression
-- `--preset, -p`: Use a preset filter from config
 - `--no-confirm`: Skip confirmation prompt
 - `--delete-files`: Also delete movie files from disk (default: true)
 - `--ignore-watched`: Delete movies even if they have been watched

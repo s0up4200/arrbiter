@@ -15,16 +15,8 @@ type RadarrConfig struct {
 	APIKey string `mapstructure:"api_key"`
 }
 
-// FilterConfig contains filter settings and presets
-type FilterConfig struct {
-	DefaultExpression string                  `mapstructure:"default_expression"`
-	Presets           map[string]FilterPreset `mapstructure:"presets"`
-}
-
-// FilterPreset represents a named filter configuration
-type FilterPreset struct {
-	Expression string `mapstructure:"expression"`
-}
+// FilterConfig contains filter definitions
+type FilterConfig map[string]string
 
 // SafetyConfig contains safety-related settings
 type SafetyConfig struct {

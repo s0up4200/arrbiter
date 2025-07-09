@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -173,13 +174,15 @@ func ParseAndCreateFilter(expression string) (func(radarr.MovieInfo) bool, error
 		return func(radarr.MovieInfo) bool { return true }, nil
 	}
 	
-	parser := NewParser(expression)
-	filter, err := parser.Parse()
-	if err != nil {
-		return nil, err
+	// Check if it's a legacy filter and convert it
+	if IsLegacyFilter(expression) {
+		convertedExpr, err := ConvertLegacyFilter(expression)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert legacy filter: %w", err)
+		}
+		expression = convertedExpr
 	}
 	
-	return func(movie radarr.MovieInfo) bool {
-		return filter.Evaluate(movie)
-	}, nil
+	// Use expr to compile and create the filter
+	return CreateExprFilter(expression)
 }
