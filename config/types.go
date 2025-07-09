@@ -2,11 +2,12 @@ package config
 
 // Config represents the complete configuration structure
 type Config struct {
-	Radarr   RadarrConfig   `mapstructure:"radarr"`
-	Tautulli TautulliConfig `mapstructure:"tautulli"`
-	Filter   FilterConfig   `mapstructure:"filter"`
-	Safety   SafetyConfig   `mapstructure:"safety"`
-	Logging  LoggingConfig  `mapstructure:"logging"`
+	Radarr    RadarrConfig    `mapstructure:"radarr"`
+	Tautulli  TautulliConfig  `mapstructure:"tautulli"`
+	Overseerr OverseerrConfig `mapstructure:"overseerr"`
+	Filter    FilterConfig    `mapstructure:"filter"`
+	Safety    SafetyConfig    `mapstructure:"safety"`
+	Logging   LoggingConfig   `mapstructure:"logging"`
 }
 
 // RadarrConfig holds Radarr API connection details
@@ -44,4 +45,11 @@ type TautulliConfig struct {
 type WatchCheckConfig struct {
 	Enabled         bool    `mapstructure:"enabled"`
 	MinWatchPercent float64 `mapstructure:"min_watch_percent"`
+}
+
+// OverseerrConfig holds Overseerr API connection details
+type OverseerrConfig struct {
+	Enabled bool   `mapstructure:"enabled"`
+	URL     string `mapstructure:"url"`
+	APIKey  string `mapstructure:"api_key"`
 }

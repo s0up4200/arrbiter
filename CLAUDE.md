@@ -39,15 +39,21 @@ This is a CLI tool for managing Radarr movies with advanced filtering and Tautul
 
 1. **Filter System** (`filter/`)
    - Uses the expr expression language for powerful and flexible filtering
-   - Custom helper functions: `hasTag()`, `watchedBy()`, `watchProgressBy()`, date helpers, rating functions (`imdbRating()`, `tmdbRating()`, etc.)
-   - Filter evaluation happens against `MovieInfo` structs with full access to all properties including ratings
+   - Custom helper functions: 
+     - Tag: `hasTag()`
+     - Watch: `watchedBy()`, `watchProgressBy()`, `watchCountBy()`
+     - Date: `daysAgo()`, `monthsAgo()`, `yearsAgo()`, `parseDate()`
+     - Rating: `imdbRating()`, `tmdbRating()`, `rottenTomatoesRating()`, `metacriticRating()`
+     - Request: `requestedBy()`, `requestedAfter()`, `requestedBefore()`, `requestStatus()`, `approvedBy()`, `isRequested()`, `notRequested()`
+   - Filter evaluation happens against `MovieInfo` structs with full access to all properties including ratings and request data
    - Supports complex expressions with arithmetic, comparisons, string operations, regex matching
    - Backwards compatibility layer (`compat.go`) converts legacy syntax to expr format
 
 2. **API Clients**
    - **Radarr Client** (`radarr/`): Wraps golift/starr library, provides movie management
    - **Tautulli Client** (`tautulli/`): Custom implementation for Plex watch history
-   - Both clients support batch operations for efficiency
+   - **Overseerr Client** (`overseerr/`): Fetches movie request data (who requested, when, status)
+   - All clients support batch operations for efficiency
 
 3. **Configuration** (`config/`)
    - Uses Viper for YAML configuration with defaults
@@ -88,9 +94,10 @@ The filter system uses the expr expression language (github.com/expr-lang/expr):
 2. List/Delete commands fetch all movies from Radarr in a single API call
 3. Tags are fetched separately and mapped to movie TagNames for filtering
 4. If Tautulli enabled, enriches movies with per-user watch status via batch history API
-5. Each filter from config is evaluated against all movies using expr
-6. Results are grouped by filter name for display (showing which filter matched)
-7. For deletion, unique movies are collected (deduped) and deleted with optional file removal
+5. If Overseerr enabled, enriches movies with request data (requester, date, status) via API
+6. Each filter from config is evaluated against all movies using expr
+7. Results are grouped by filter name for display (showing which filter matched)
+8. For deletion, unique movies are collected (deduped) and deleted with optional file removal
 
 ## Common Development Tasks
 
@@ -135,4 +142,10 @@ When modifying API interactions:
 
 ## Configuration Notes
 
-The tool expects sensitive API keys in `config.yaml` (gitignored). Example configuration is in `config.yaml.example`. The Tautulli integration can be disabled entirely by setting `tautulli.enabled: false`.
+The tool expects sensitive API keys in `config.yaml` (gitignored). Example configuration is in `config.yaml.example`. 
+
+Optional integrations:
+- Tautulli integration can be disabled by setting `tautulli.enabled: false`
+- Overseerr integration can be disabled by setting `overseerr.enabled: false`
+
+Both integrations operate independently and can be enabled/disabled as needed.

@@ -106,6 +106,14 @@ type MovieInfo struct {
 	// Rating data
 	Ratings    map[string]float64 // Map of source -> rating value (e.g. "imdb" -> 7.5)
 	Popularity float64
+	// Request data from Overseerr
+	RequestedBy      string    // Username of who requested the movie
+	RequestedByEmail string    // Email of requester
+	RequestDate      time.Time // When the movie was requested
+	RequestStatus    string    // Status from Overseerr (PENDING, APPROVED, AVAILABLE)
+	ApprovedBy       string    // Who approved the request
+	IsAutoRequest    bool      // Whether it was an automatic request
+	IsRequested      bool      // Whether movie was requested via Overseerr
 }
 
 // UserWatchInfo contains watch information for a specific user

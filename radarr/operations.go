@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
+	"github.com/soup/radarr-cleanup/overseerr"
 	"github.com/soup/radarr-cleanup/tautulli"
 )
 
@@ -27,6 +28,7 @@ type DeleteOptions struct {
 type Operations struct {
 	client          *Client
 	tautulliClient  *tautulli.Client
+	overseerrClient *overseerr.Client
 	logger          zerolog.Logger
 	minWatchPercent float64
 }
@@ -48,6 +50,11 @@ func (o *Operations) SetTautulliClient(client *tautulli.Client) {
 // SetMinWatchPercent sets the minimum watch percentage for considering a movie watched
 func (o *Operations) SetMinWatchPercent(percent float64) {
 	o.minWatchPercent = percent
+}
+
+// SetOverseerrClient sets the Overseerr client for request data lookups
+func (o *Operations) SetOverseerrClient(client *overseerr.Client) {
+	o.overseerrClient = client
 }
 
 // GetAllMovies returns all movies with enriched data
@@ -76,6 +83,14 @@ func (o *Operations) GetAllMovies(ctx context.Context) ([]MovieInfo, error) {
 		o.logger.Debug().Msg("Fetching watch status from Tautulli")
 		if err := o.enrichWithWatchStatus(ctx, results); err != nil {
 			o.logger.Warn().Err(err).Msg("Failed to fetch watch status from Tautulli")
+		}
+	}
+	
+	// Enrich with request data if Overseerr is configured
+	if o.overseerrClient != nil {
+		o.logger.Debug().Msg("Fetching request data from Overseerr")
+		if err := o.enrichWithRequestData(ctx, results); err != nil {
+			o.logger.Warn().Err(err).Msg("Failed to fetch request data from Overseerr")
 		}
 	}
 	
@@ -109,6 +124,15 @@ func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo
 		if err := o.enrichWithWatchStatus(ctx, movieInfos); err != nil {
 			o.logger.Warn().Err(err).Msg("Failed to fetch watch status from Tautulli")
 			// Continue without watch status
+		}
+	}
+	
+	// Fetch request data if Overseerr is configured
+	if o.overseerrClient != nil {
+		o.logger.Debug().Msg("Fetching request data from Overseerr")
+		if err := o.enrichWithRequestData(ctx, movieInfos); err != nil {
+			o.logger.Warn().Err(err).Msg("Failed to fetch request data from Overseerr")
+			// Continue without request data
 		}
 	}
 	
@@ -172,6 +196,52 @@ func (o *Operations) enrichWithWatchStatus(ctx context.Context, movies []MovieIn
 			}
 		}
 	}
+	
+	return nil
+}
+
+// enrichWithRequestData adds request information from Overseerr to movies
+func (o *Operations) enrichWithRequestData(ctx context.Context, movies []MovieInfo) error {
+	// Get all movie requests from Overseerr
+	requests, err := o.overseerrClient.GetMovieRequests(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch movie requests: %w", err)
+	}
+	
+	// Create a map of TMDB ID to requests for efficient lookup
+	requestsByTMDB := make(map[int64][]overseerr.MediaRequest)
+	for _, req := range requests {
+		tmdbID := int64(req.Media.TmdbID)
+		requestsByTMDB[tmdbID] = append(requestsByTMDB[tmdbID], req)
+	}
+	
+	// Update movie info with request data
+	for i := range movies {
+		if requests, ok := requestsByTMDB[movies[i].TMDBID]; ok && len(requests) > 0 {
+			// Use the most recent request
+			var latestRequest overseerr.MediaRequest
+			for _, req := range requests {
+				if latestRequest.ID == 0 || req.CreatedAt.After(latestRequest.CreatedAt) {
+					latestRequest = req
+				}
+			}
+			
+			// Convert and assign request data
+			requestData := overseerr.ConvertToMovieRequest(latestRequest)
+			movies[i].RequestedBy = requestData.RequestedBy
+			movies[i].RequestedByEmail = requestData.RequestedByEmail
+			movies[i].RequestDate = requestData.RequestDate
+			movies[i].RequestStatus = requestData.RequestStatus
+			movies[i].ApprovedBy = requestData.ApprovedBy
+			movies[i].IsAutoRequest = requestData.IsAutoRequest
+			movies[i].IsRequested = true
+		}
+	}
+	
+	o.logger.Debug().
+		Int("total_requests", len(requests)).
+		Int("matched_movies", len(requestsByTMDB)).
+		Msg("Enriched movies with Overseerr request data")
 	
 	return nil
 }
@@ -261,6 +331,16 @@ func (o *Operations) printMoviesToDelete(movies []MovieInfo) {
 			fmt.Printf("  Watch Count: %d", movie.WatchCount)
 			if !movie.LastWatched.IsZero() {
 				fmt.Printf(" (Last: %s)", movie.LastWatched.Format("2006-01-02"))
+			}
+			fmt.Println()
+		}
+		if movie.IsRequested {
+			fmt.Printf("  Requested by: %s", movie.RequestedBy)
+			if !movie.RequestDate.IsZero() {
+				fmt.Printf(" on %s", movie.RequestDate.Format("2006-01-02"))
+			}
+			if movie.RequestStatus != "" {
+				fmt.Printf(" (Status: %s)", movie.RequestStatus)
 			}
 			fmt.Println()
 		}

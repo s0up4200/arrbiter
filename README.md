@@ -1,11 +1,12 @@
 # Radarr Cleanup
 
-A CLI tool to manage and clean up Radarr movies based on advanced filter criteria, with optional Tautulli integration for watch status.
+A CLI tool to manage and clean up Radarr movies based on advanced filter criteria, with optional Tautulli and Overseerr integration for watch status and request tracking.
 
 ## Features
 
 - **Advanced Filtering**: Filter movies by tags, date added, date imported, and watch status
 - **Tautulli Integration**: Check if movies have been watched before deleting
+- **Overseerr Integration**: Filter based on who requested movies and when
 - **Logical Operators**: Combine filters using AND, OR, and NOT operators
 - **Preset Filters**: Define reusable filter expressions in configuration
 - **Safety Features**: Dry-run mode, confirmation prompts, watched movie warnings
@@ -32,7 +33,7 @@ go build
    cp config.yaml.example config.yaml
    ```
 
-2. Edit `config.yaml` with your Radarr and optionally Tautulli details:
+2. Edit `config.yaml` with your Radarr and optionally Tautulli/Overseerr details:
    ```yaml
    radarr:
      url: http://localhost:7878
@@ -42,6 +43,11 @@ go build
      enabled: true
      url: http://localhost:8181
      api_key: your-tautulli-api-key
+     
+   overseerr:
+     enabled: true
+     url: http://localhost:5055
+     api_key: your-overseerr-api-key
    ```
 
 The tool will look for `config.yaml` in:
@@ -129,6 +135,15 @@ UserWatchData  # map[string]*UserWatchInfo - Per-user watch information
 # Rating Properties
 Ratings        # map[string]float64 - Map of rating source to value
 Popularity     # float64 - Movie popularity score
+
+# Request Properties (Overseerr Integration)
+RequestedBy      # string - Username of who requested the movie
+RequestedByEmail # string - Email of requester
+RequestDate      # time.Time - When the movie was requested
+RequestStatus    # string - Status from Overseerr (PENDING, APPROVED, AVAILABLE)
+ApprovedBy       # string - Who approved the request
+IsAutoRequest    # bool - Whether it was an automatic request
+IsRequested      # bool - Whether movie was requested via Overseerr
 ```
 
 ### Helper Functions
@@ -164,6 +179,15 @@ rottenTomatoesRating()         # Get Rotten Tomatoes percentage (0 if not availa
 metacriticRating()             # Get Metacritic score (0 if not available)
 hasRating("source")            # Check if rating from source exists
 getRating("source")            # Get rating value from any source (0 if not available)
+
+# Request Functions (Overseerr Integration)
+requestedBy("username")        # Check if movie was requested by specific user
+requestedAfter(date)           # Movies requested after date
+requestedBefore(date)          # Movies requested before date
+requestStatus("AVAILABLE")     # Filter by request status
+approvedBy("admin")            # Filter by who approved
+isRequested()                  # Check if movie was requested vs manually added
+notRequested()                 # Movies added directly to Radarr
 ```
 
 ### Examples
@@ -371,6 +395,57 @@ good_action_movies: |
   rottenTomatoesRating() >= 70
 ```
 
+#### Request-Based Filtering (Overseerr Integration)
+
+```yaml
+# Movies requested by inactive users
+inactive_user_requests: |
+  requestedBy("john_doe") and 
+  not watchedBy("john_doe") and 
+  requestedBefore(monthsAgo(6))
+
+# Clean up abandoned requests
+abandoned_requests: |
+  requestStatus("AVAILABLE") and 
+  not Watched and 
+  requestedBefore(monthsAgo(3))
+
+# Low-rated movies unless specifically requested
+low_rated_cleanup: imdbRating() < 5 and notRequested()
+
+# Movies requested by guests that weren't watched
+guest_cleanup: |
+  requestedBy("guest") and 
+  not Watched and 
+  Added < monthsAgo(1)
+
+# High-value requests (admin approved, still unwatched)
+priority_review: |
+  approvedBy("admin") and 
+  not Watched and 
+  requestedAfter(monthsAgo(1))
+
+# Movies added manually (not through Overseerr)
+manual_additions: notRequested() and Added > daysAgo(7)
+
+# Old pending requests
+stuck_requests: |
+  requestStatus("PENDING") and 
+  requestedBefore(monthsAgo(1))
+
+# Requested but low quality
+requested_low_quality: |
+  isRequested() and
+  imdbRating() < 6 and
+  rottenTomatoesRating() < 60
+
+# Combine request data with watch data
+user_request_watched: |
+  requestedBy("alice") and 
+  watchedBy("alice") and
+  watchProgressBy("alice") > 90
+```
+
 
 ## Safety Features
 
@@ -424,6 +499,42 @@ The tool now supports filtering by specific Plex users:
 - Use `watched_by:"username"` to check if a specific user has watched a movie
 - Use `watch_count_by:"username">N` to check how many times a user has watched
 - The general `watched:true` filter checks if ANY user has watched the movie
+
+## Overseerr Integration
+
+When Overseerr is enabled, the tool will retrieve request information for movies to help with filtering decisions. This allows you to filter based on who requested movies, when they were requested, and their request status.
+
+### Configuration
+
+```yaml
+overseerr:
+  enabled: true
+  url: http://localhost:5055
+  api_key: your-overseerr-api-key
+```
+
+### How It Works
+
+1. The tool queries Overseerr for all movie requests via the API
+2. Movies are matched by TMDB ID
+3. Request information includes who requested, when, status, and who approved
+4. The most recent request is used if multiple exist for the same movie
+
+### Request Properties Available
+
+- `RequestedBy`: Username of the person who requested the movie
+- `RequestDate`: When the movie was requested
+- `RequestStatus`: Current status (PENDING, APPROVED, AVAILABLE, etc.)
+- `ApprovedBy`: Username of who approved the request (if applicable)
+- `IsRequested`: Whether the movie came through Overseerr
+
+### Use Cases
+
+This integration enables powerful filtering scenarios:
+- Clean up movies requested by users who no longer use the service
+- Remove old requests that were never watched
+- Protect movies that were specifically requested by certain users
+- Differentiate between requested content and manually added movies
 
 ## Development
 

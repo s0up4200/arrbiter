@@ -181,6 +181,29 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 			return 0
 		},
 		
+		// Request helpers (Overseerr integration)
+		"requestedBy": func(username string) bool {
+			return movie.IsRequested && strings.EqualFold(movie.RequestedBy, username)
+		},
+		"requestedAfter": func(date time.Time) bool {
+			return movie.IsRequested && movie.RequestDate.After(date)
+		},
+		"requestedBefore": func(date time.Time) bool {
+			return movie.IsRequested && movie.RequestDate.Before(date)
+		},
+		"requestStatus": func(status string) bool {
+			return movie.IsRequested && strings.EqualFold(movie.RequestStatus, status)
+		},
+		"approvedBy": func(username string) bool {
+			return movie.IsRequested && strings.EqualFold(movie.ApprovedBy, username)
+		},
+		"isRequested": func() bool {
+			return movie.IsRequested
+		},
+		"notRequested": func() bool {
+			return !movie.IsRequested
+		},
+		
 		// Direct movie properties for convenience
 		"Title":         movie.Title,
 		"Year":          movie.Year,
@@ -197,6 +220,14 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 		"TMDBID":        movie.TMDBID,
 		"Ratings":       movie.Ratings,
 		"Popularity":    movie.Popularity,
+		// Request properties
+		"RequestedBy":      movie.RequestedBy,
+		"RequestedByEmail": movie.RequestedByEmail,
+		"RequestDate":      movie.RequestDate,
+		"RequestStatus":    movie.RequestStatus,
+		"ApprovedBy":       movie.ApprovedBy,
+		"IsAutoRequest":    movie.IsAutoRequest,
+		"IsRequested":      movie.IsRequested,
 	}
 	
 	result, err := expr.Run(f.program, env)

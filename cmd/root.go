@@ -12,17 +12,19 @@ import (
 
 	"github.com/soup/radarr-cleanup/config"
 	"github.com/soup/radarr-cleanup/filter"
+	"github.com/soup/radarr-cleanup/overseerr"
 	"github.com/soup/radarr-cleanup/radarr"
 	"github.com/soup/radarr-cleanup/tautulli"
 )
 
 var (
-	cfgFile        string
-	cfg            *config.Config
-	logger         zerolog.Logger
-	radarrClient   *radarr.Client
-	tautulliClient *tautulli.Client
-	operations     *radarr.Operations
+	cfgFile         string
+	cfg             *config.Config
+	logger          zerolog.Logger
+	radarrClient    *radarr.Client
+	tautulliClient  *tautulli.Client
+	overseerrClient *overseerr.Client
+	operations      *radarr.Operations
 
 	// Command flags
 	dryRun        bool
@@ -93,6 +95,17 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 			operations.SetTautulliClient(tautulliClient)
 			operations.SetMinWatchPercent(cfg.Tautulli.WatchCheck.MinWatchPercent)
 			logger.Info().Msg("Tautulli integration enabled")
+		}
+	}
+
+	// Create Overseerr client if enabled
+	if cfg.Overseerr.Enabled {
+		overseerrClient, err = overseerr.NewClient(cfg.Overseerr.URL, cfg.Overseerr.APIKey, logger)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to create Overseerr client, continuing without request data")
+		} else {
+			operations.SetOverseerrClient(overseerrClient)
+			logger.Info().Msg("Overseerr integration enabled")
 		}
 	}
 
