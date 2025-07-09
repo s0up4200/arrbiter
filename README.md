@@ -19,7 +19,7 @@ A CLI tool to manage and clean up Radarr movies based on advanced filter criteri
 ### Homebrew
 
 ```bash
-brew tap s0up4200/arrbiter
+brew tap s0up4200/arrbiter https://github.com/s0up4200/arrbiter
 brew install arrbiter
 ```
 
