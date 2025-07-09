@@ -125,7 +125,7 @@ release:
     ### Homebrew
     ```bash
     brew tap s0up4200/arrbiter https://github.com/s0up4200/arrbiter
-    brew install arrbiter
+    brew install --cask arrbiter
     ```
 
     ### Binary
