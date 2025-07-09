@@ -203,6 +203,28 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 		"notRequested": func() bool {
 			return !movie.IsRequested
 		},
+		"notWatchedByRequester": func() bool {
+			if !movie.IsRequested || movie.RequestedBy == "" {
+				return false
+			}
+			// Check if the requester has watched it
+			minWatchPercent := 85.0 // Default watch threshold
+			if userData, exists := movie.UserWatchData[movie.RequestedBy]; exists {
+				return userData.MaxProgress < minWatchPercent
+			}
+			return true // Not watched if no watch data
+		},
+		"watchedByRequester": func() bool {
+			if !movie.IsRequested || movie.RequestedBy == "" {
+				return false
+			}
+			// Check if the requester has watched it
+			minWatchPercent := 85.0 // Default watch threshold
+			if userData, exists := movie.UserWatchData[movie.RequestedBy]; exists {
+				return userData.MaxProgress >= minWatchPercent
+			}
+			return false // Not watched if no watch data
+		},
 		
 		// Direct movie properties for convenience
 		"Title":         movie.Title,

@@ -188,6 +188,8 @@ requestStatus("AVAILABLE")     # Filter by request status
 approvedBy("admin")            # Filter by who approved
 isRequested()                  # Check if movie was requested vs manually added
 notRequested()                 # Movies added directly to Radarr
+notWatchedByRequester()        # Movies where the requester hasn't watched them
+watchedByRequester()           # Movies where the requester has watched them
 ```
 
 ### Examples
@@ -444,7 +446,37 @@ user_request_watched: |
   requestedBy("alice") and 
   watchedBy("alice") and
   watchProgressBy("alice") > 90
+
+# Movies where the person who requested hasn't watched them
+requester_not_watched: notWatchedByRequester() and Added < monthsAgo(1)
+
+# Movies where the requester has watched them
+requester_watched: watchedByRequester() and requestedBefore(monthsAgo(6))
+
+# Same as above but more explicit
+explicit_not_watched: |
+  requestedBy("john") and 
+  not watchedBy("john") and 
+  Added < monthsAgo(1)
 ```
+
+#### Understanding Request Watch Functions
+
+**`notWatchedByRequester()`**
+- Returns `true` only if the movie was requested AND the requester hasn't watched it (< 85% progress)
+- Returns `false` if the movie wasn't requested or if the requester has watched it
+- Useful for cleaning up movies that users requested but never watched
+
+**`watchedByRequester()`**
+- Returns `true` only if the movie was requested AND the requester has watched it (≥ 85% progress)
+- Returns `false` if the movie wasn't requested or if the requester hasn't watched it
+- Useful for finding successful requests where the requester actually watched the movie
+
+**Important Notes:**
+- Both functions require the movie to be requested through Overseerr
+- They check the watch status of specifically the person who requested it
+- Using `!notWatchedByRequester()` matches movies that either weren't requested OR were requested and watched
+- Using `!watchedByRequester()` matches movies that either weren't requested OR were requested but not watched
 
 
 ## Safety Features

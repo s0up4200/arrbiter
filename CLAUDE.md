@@ -44,7 +44,7 @@ This is a CLI tool for managing Radarr movies with advanced filtering and Tautul
      - Watch: `watchedBy()`, `watchProgressBy()`, `watchCountBy()`
      - Date: `daysAgo()`, `monthsAgo()`, `yearsAgo()`, `parseDate()`
      - Rating: `imdbRating()`, `tmdbRating()`, `rottenTomatoesRating()`, `metacriticRating()`
-     - Request: `requestedBy()`, `requestedAfter()`, `requestedBefore()`, `requestStatus()`, `approvedBy()`, `isRequested()`, `notRequested()`
+     - Request: `requestedBy()`, `requestedAfter()`, `requestedBefore()`, `requestStatus()`, `approvedBy()`, `isRequested()`, `notRequested()`, `notWatchedByRequester()`, `watchedByRequester()`
    - Filter evaluation happens against `MovieInfo` structs with full access to all properties including ratings and request data
    - Supports complex expressions with arithmetic, comparisons, string operations, regex matching
    - Backwards compatibility layer (`compat.go`) converts legacy syntax to expr format
