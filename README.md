@@ -74,7 +74,7 @@ go build
    cp config.yaml.example config.yaml
    ```
 
-2. Edit `config.yaml` with your Radarr and optionally Tautulli/Overseerr details:
+2. Edit `config.yaml` with your Radarr details and optional integrations:
    ```yaml
    radarr:
      url: http://localhost:7878
@@ -90,6 +90,12 @@ go build
    overseerr:
      url: http://localhost:5055
      api_key: your-overseerr-api-key
+   
+   # Optional: Add qBittorrent for hardlink management
+   qbittorrent:
+     url: http://localhost:8080
+     username: admin
+     password: adminpass
    ```
 
 The tool will look for `config.yaml` in:
@@ -489,12 +495,7 @@ When Tautulli is enabled, the tool will check if movies have been watched before
 
 ### Configuration
 
-```yaml
-tautulli:
-  url: http://localhost:8181
-  api_key: your-tautulli-api-key
-  min_watch_percent: 85  # Consider watched if >85% viewed
-```
+Add Tautulli settings to your `config.yaml` as shown in the [Configuration](#configuration) section above.
 
 ### How It Works
 
@@ -516,11 +517,7 @@ When Overseerr is enabled, the tool will retrieve request information for movies
 
 ### Configuration
 
-```yaml
-overseerr:
-  url: http://localhost:5055
-  api_key: your-overseerr-api-key
-```
+Add Overseerr settings to your `config.yaml` as shown in the [Configuration](#configuration) section above.
 
 ### How It Works
 
@@ -542,12 +539,7 @@ The `hardlink` command helps ensure proper hardlinking between Radarr and qBitto
 
 ### Configuration
 
-```yaml
-qbittorrent:
-  url: http://localhost:8080
-  username: admin
-  password: adminpass
-```
+Add qBittorrent settings to your `config.yaml` as shown in the [Configuration](#configuration) section above.
 
 ### Usage
 
