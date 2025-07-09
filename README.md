@@ -104,9 +104,14 @@ Define your filters in `config.yaml`:
 
 ```yaml
 filter:
-  mathis: hasTag("trash") and watchedBy("myttolini")
-  john: hasTag("action") and WatchCount > 5
-  old_unwatched: Added < yearsAgo(1) and not Watched
+  # Remove movies requested but not watched within 30 days
+  unwatched_requests: notWatchedByRequester() and Added < daysAgo(30)
+  
+  # Clean up low-rated movies nobody requested
+  poor_quality: imdbRating() < 5.5 and notRequested() and Added < daysAgo(30)
+  
+  # Free up space from old unwatched content
+  space_cleanup: not Watched and Added < monthsAgo(3) and not hasTag("keep")
 ```
 
 Then run the tool:
@@ -232,268 +237,152 @@ notWatchedByRequester()        # Movies where the requester hasn't watched them
 watchedByRequester()           # Movies where the requester has watched them
 ```
 
-### Examples
+### Practical Filter Examples
 
-#### Basic Property Filtering
-
-```yaml
-# Filter by title
-title_match: contains(Title, "Star Wars")
-sequel_movies: contains(Title, "2") or contains(Title, "II")
-the_movies: startsWith(Title, "The")
-
-# Filter by year
-old_movies: Year < 2000
-recent_movies: Year >= 2020
-specific_decade: Year >= 1980 and Year < 1990
-
-# Filter by file path
-mkv_files: endsWith(Path, ".mkv")
-specific_folder: contains(Path, "/movies/action/")
-
-# Filter by IDs
-specific_imdb: IMDBID == "tt0111161"  # The Shawshank Redemption
-has_tmdb: TMDBID > 0
-```
-
-#### Status and Watch Filtering
+#### Request Accountability
+*Ensure users watch what they request*
 
 ```yaml
-# Watch status (any user)
-watched_movies: Watched
-unwatched_movies: not Watched
-popular_movies: WatchCount > 3
-barely_watched: WatchProgress < 20
+# Movies requested but not watched by requester after reasonable time
+unwatched_requests_30d: |
+  notWatchedByRequester() and 
+  Added < daysAgo(30)
 
-# Specific user filtering
-user_watched: watchedBy("john")
-user_not_watched: not watchedBy("john")
-user_watch_count: watchCountBy("john") >= 2
-user_partial: watchProgressBy("john") > 0 and watchProgressBy("john") < 85
-
-# Multiple users
-either_user: watchedBy("john") or watchedBy("jane")
-both_users: watchedBy("john") and watchedBy("jane")
-john_not_jane: watchedBy("john") and not watchedBy("jane")
-```
-
-#### Date Filtering
-
-```yaml
-# Using specific dates
-old_additions: Added < parseDate("2023-01-01")
-recent_additions: Added > parseDate("2024-06-01")
-date_range: Added >= parseDate("2024-01-01") and Added <= parseDate("2024-12-31")
-
-# Using relative dates
-last_30_days: Added > daysAgo(30)
-last_week: daysSince(Added) <= 7
-six_months_old: Added < monthsAgo(6)
-over_year_old: Added < yearsAgo(1)
-
-# File import dates
-recent_imports: FileImported > daysAgo(7)
-old_imports: daysSince(FileImported) > 365
-never_imported: FileImported.IsZero()  # No file imported
-
-# Last watched dates
-recently_watched: daysSince(LastWatched) < 30
-not_watched_year: daysSince(LastWatched) > 365
-```
-
-#### Tag Filtering
-
-```yaml
-# Single tag
-action_movies: hasTag("action")
-no_action: not hasTag("action")
-
-# Multiple tags (OR)
-action_or_thriller: hasTag("action") or hasTag("thriller")
-
-# Multiple tags (AND)
-action_and_good: hasTag("action") and hasTag("recommended")
-
-# Tag combinations
-user_tags: hasTag("10 - john") and not hasTag("keep")
-cleanup_tags: hasTag("cleanup") or hasTag("remove") or hasTag("delete")
-
-# Using array syntax (alternative)
-has_any_tag: len(Tags) > 0
-many_tags: len(Tags) >= 3
-```
-
-#### String Operations
-
-```yaml
-# Case-insensitive searches
-marvel_movies: contains(Title, "marvel") or contains(Title, "avengers")
-batman_movies: contains(lower(Title), "batman")
-
-# Path operations
-linux_isos: contains(Path, "linux") and endsWith(Path, ".iso")
-downloads_folder: startsWith(Path, "/downloads/")
-
-# Title patterns
-numbered_sequels: Title matches ".*\\s\\d+$"  # Ends with number
-year_in_title: Title matches ".*\\(\\d{4}\\)"  # Contains year in parentheses
-```
-
-#### Complex Real-World Examples
-
-```yaml
-# Old unwatched movies with specific tags
-cleanup_candidates: |
-  hasTag("cleanup") and 
-  not Watched and 
-  Added < monthsAgo(6)
-
-# Movies partially watched by guests
-guest_abandoned: |
-  watchProgressBy("guest") > 10 and 
-  watchProgressBy("guest") < 70 and
-  daysSince(LastWatched) > 30
-
-# High quality files nobody watches
-wasted_space: |
-  contains(Path, "2160p") and 
-  WatchCount == 0 and 
-  Added < monthsAgo(3)
-
-# Kids movies adults watched
-kids_watched_by_adults: |
-  hasTag("kids") and 
-  (watchedBy("mom") or watchedBy("dad")) and
-  not watchedBy("child1")
-
-# Incomplete series
-incomplete_series: |
-  (contains(Title, "Part 1") or contains(Title, "Chapter 1")) and
-  not Watched
-
-# Foreign films with low engagement  
-foreign_unwatched: |
-  not contains(Path, "/english/") and
-  WatchCount < 2 and
-  daysSince(Added) > 60
-
-# Recently added but quickly abandoned
-quick_abandons: |
-  daysSince(Added) < 30 and
-  WatchProgress > 0 and
-  WatchProgress < 30 and
-  daysSince(LastWatched) > 7
-
-# Using Movie prefix for direct access
-movie_prefix: Movie.Title == "The Matrix" and Movie.Year == 1999
-```
-
-#### Rating-Based Filtering
-
-```yaml
-# High quality movies only
-high_rated: imdbRating() >= 7.5 and rottenTomatoesRating() >= 80
-
-# Low rated movies to clean up
-low_rated: imdbRating() < 5.0 or metacriticRating() < 40
-
-# Movies with no ratings
-unrated: not hasRating("imdb") and not hasRating("tmdb")
-
-# Popular movies
-popular: Popularity > 100 and tmdbRating() > 7
-
-# Critics vs audience disagreement
-controversial: abs(rottenTomatoesRating() - imdbRating() * 10) > 30
-
-# Highly rated but unwatched
-highly_rated_unwatched: |
-  imdbRating() >= 8.0 and
-  not Watched and
-  Added < monthsAgo(3)
-
-# Low IMDB but high RT score (critical darlings)
-critical_darlings: |
-  imdbRating() < 6.5 and
-  rottenTomatoesRating() > 85
-
-# Check specific rating exists
-has_metacritic: hasRating("metacritic")
-
-# Use any rating source dynamically
-any_high_rating: |
-  getRating("imdb") > 8 or
-  getRating("tmdb") > 8 or
-  getRating("metacritic") > 80
-
-# Combine ratings with other properties
-good_action_movies: |
-  hasTag("action") and
-  imdbRating() >= 7.0 and
-  rottenTomatoesRating() >= 70
-```
-
-#### Request-Based Filtering (Overseerr Integration)
-
-```yaml
-# Movies requested by inactive users
-inactive_user_requests: |
-  requestedBy("john_doe") and 
-  not watchedBy("john_doe") and 
-  requestedBefore(monthsAgo(6))
-
-# Clean up abandoned requests
-abandoned_requests: |
-  requestStatus("AVAILABLE") and 
-  not Watched and 
-  requestedBefore(monthsAgo(3))
-
-# Low-rated movies unless specifically requested
-low_rated_cleanup: imdbRating() < 5 and notRequested()
-
-# Movies requested by guests that weren't watched
-guest_cleanup: |
-  requestedBy("guest") and 
-  not Watched and 
-  Added < monthsAgo(1)
-
-# High-value requests (admin approved, still unwatched)
-priority_review: |
-  approvedBy("admin") and 
-  not Watched and 
-  requestedAfter(monthsAgo(1))
-
-# Movies added manually (not through Overseerr)
-manual_additions: notRequested() and Added > daysAgo(7)
-
-# Old pending requests
-stuck_requests: |
-  requestStatus("PENDING") and 
-  requestedBefore(monthsAgo(1))
-
-# Requested but low quality
-requested_low_quality: |
-  isRequested() and
-  imdbRating() < 6 and
-  rottenTomatoesRating() < 60
-
-# Combine request data with watch data
-user_request_watched: |
-  requestedBy("alice") and 
-  watchedBy("alice") and
-  watchProgressBy("alice") > 90
-
-# Movies where the person who requested hasn't watched them
-requester_not_watched: notWatchedByRequester() and Added < monthsAgo(1)
-
-# Movies where the requester has watched them
-requester_watched: watchedByRequester() and requestedBefore(monthsAgo(6))
-
-# Same as above but more explicit
-explicit_not_watched: |
+# Movies requested by specific user who hasn't watched them
+user_unwatched_requests: |
   requestedBy("john") and 
   not watchedBy("john") and 
+  Added < daysAgo(14)
+
+# Successfully watched requests (can be excluded from cleanup)
+successful_requests: |
+  watchedByRequester() and 
+  watchProgressBy(RequestedBy) > 90
+```
+
+#### Storage Management
+*Free up disk space intelligently*
+
+```yaml
+# Old movies nobody has watched
+space_wasters: |
+  not Watched and 
+  Added < monthsAgo(3) and 
+  not hasTag("keep")
+
+# Large files with low engagement
+unwatched_4k: |
+  contains(Path, "2160p") and 
+  WatchCount < 2 and 
+  Added < monthsAgo(2)
+
+# Movies watched once and forgotten
+one_time_watches: |
+  WatchCount == 1 and 
+  daysSince(LastWatched) > 180
+```
+
+#### Quality Control
+*Remove low-quality content unless specifically wanted*
+
+```yaml
+# Low-rated movies nobody requested
+poor_quality_unrequested: |
+  imdbRating() < 5.5 and 
+  notRequested() and 
+  Added < daysAgo(30)
+
+# Low-rated movies even if requested (but give them time)
+poor_quality_any: |
+  imdbRating() < 5 and 
+  not Watched and 
+  Added < monthsAgo(2)
+
+# Movies with poor ratings across multiple sources
+universally_bad: |
+  imdbRating() < 5 and 
+  rottenTomatoesRating() < 40 and 
+  not hasTag("guilty-pleasure")
+```
+
+#### User Management
+*Handle inactive users and their content*
+
+```yaml
+# Requests from users who left the server
+inactive_user_cleanup: |
+  requestedBy("former_user") and 
+  not Watched and 
   Added < monthsAgo(1)
+
+# Guest requests that weren't watched
+guest_cleanup: |
+  requestedBy("guest") and 
+  not watchedBy("guest") and 
+  Added < daysAgo(7)
+```
+
+#### Time-Based Cleanup Policies
+*Progressive cleanup based on age and engagement*
+
+```yaml
+# 30-day policy: Remove if unwatched after a month
+cleanup_30d: |
+  not Watched and 
+  Added < daysAgo(30) and 
+  imdbRating() < 7
+
+# 90-day policy: Remove poorly rated movies
+cleanup_90d: |
+  not Watched and 
+  Added < daysAgo(90) and 
+  imdbRating() < 6
+
+# 180-day policy: Remove anything still unwatched
+cleanup_180d: |
+  not Watched and 
+  Added < daysAgo(180)
+```
+
+#### Tag-Based Management
+*Use tags for organization and protection*
+
+```yaml
+# Movies tagged for removal
+tagged_removal: |
+  hasTag("remove") or 
+  hasTag("cleanup")
+
+# Protect tagged movies from all other filters
+protected: |
+  not hasTag("keep") and 
+  not hasTag("favorite") and 
+  # ... your other conditions
+```
+
+#### Combined Real-World Scenarios
+
+```yaml
+# Smart cleanup: Unwatched + Low rated + Not recent + Not requested
+smart_cleanup: |
+  not Watched and
+  imdbRating() < 6.5 and
+  Added < monthsAgo(2) and
+  notRequested()
+
+# Request accountability with ratings consideration
+request_quality_check: |
+  notWatchedByRequester() and
+  imdbRating() < 6 and
+  Added < daysAgo(30)
+
+# Space saver: Old, unwatched, low-rated, not protected
+aggressive_cleanup: |
+  not Watched and
+  (imdbRating() < 6 or not hasRating("imdb")) and
+  Added < monthsAgo(3) and
+  not hasTag("keep") and
+  WatchCount == 0
 ```
 
 #### Understanding Request Watch Functions

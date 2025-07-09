@@ -310,48 +310,69 @@ func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts 
 
 // printMoviesToDelete prints the list of movies to be deleted
 func (o *Operations) printMoviesToDelete(movies []MovieInfo) {
-	fmt.Printf("\nMovies to be deleted (%d):\n", len(movies))
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Printf("\nMovie")
+	if len(movies) != 1 {
+		fmt.Printf("s")
+	}
+	fmt.Printf(" to be deleted (%d):\n\n", len(movies))
 	
 	var watchedCount int
-	for _, movie := range movies {
-		fmt.Printf("• %s (%d)\n", movie.Title, movie.Year)
+	for i, movie := range movies {
+		isLast := i == len(movies)-1
+		prefix := "\u251c"
+		if isLast {
+			prefix = "\u2570"
+		}
+		
+		fmt.Printf("%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
 		
 		// Track watch status for warning
 		if movie.Watched {
 			watchedCount++
 		}
 		
+		indent := "\u2502   "
+		if isLast {
+			indent = "    "
+		}
+		
 		if len(movie.TagNames) > 0 {
-			fmt.Printf("  Tags: %s\n", strings.Join(movie.TagNames, ", "))
+			fmt.Printf("%sTags: %s\n", indent, strings.Join(movie.TagNames, ", "))
 		}
 		if movie.HasFile {
-			fmt.Printf("  File: %s\n", movie.Path)
+			fmt.Printf("%sFile: %s\n", indent, movie.Path)
 		}
-		fmt.Printf("  Added: %s\n", movie.Added.Format("2006-01-02"))
+		
+		dateInfo := fmt.Sprintf("Added: %s", movie.Added.Format("2006-01-02"))
 		if !movie.FileImported.IsZero() {
-			fmt.Printf("  Imported: %s\n", movie.FileImported.Format("2006-01-02"))
+			dateInfo += fmt.Sprintf(" | Imported: %s", movie.FileImported.Format("2006-01-02"))
 		}
+		fmt.Printf("%s%s\n", indent, dateInfo)
+		
 		if movie.WatchCount > 0 {
-			fmt.Printf("  Watch Count: %d", movie.WatchCount)
+			watchInfo := fmt.Sprintf("Watched %dx", movie.WatchCount)
 			if !movie.LastWatched.IsZero() {
-				fmt.Printf(" (Last: %s)", movie.LastWatched.Format("2006-01-02"))
+				watchInfo += fmt.Sprintf(" (last: %s)", movie.LastWatched.Format("2006-01-02"))
 			}
-			fmt.Println()
+			fmt.Printf("%s%s\n", indent, watchInfo)
 		}
+		
 		if movie.IsRequested {
-			fmt.Printf("  Requested by: %s", movie.RequestedBy)
+			requestInfo := fmt.Sprintf("Requested by: %s", movie.RequestedBy)
 			if !movie.RequestDate.IsZero() {
-				fmt.Printf(" on %s", movie.RequestDate.Format("2006-01-02"))
+				requestInfo += fmt.Sprintf(" on %s", movie.RequestDate.Format("2006-01-02"))
 			}
 			if movie.RequestStatus != "" {
-				fmt.Printf(" (Status: %s)", movie.RequestStatus)
+				requestInfo += fmt.Sprintf(" (Status: %s)", movie.RequestStatus)
 			}
-			fmt.Println()
+			fmt.Printf("%s%s\n", indent, requestInfo)
 		}
-		fmt.Println()
+		
+		if i < len(movies)-1 {
+			fmt.Printf("\u2502\n")
+		}
 	}
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Println()
 	
 	if watchedCount > 0 {
 		fmt.Printf("\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(movies))

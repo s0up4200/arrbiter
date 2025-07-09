@@ -15,31 +15,20 @@ filter:
   # Each entry is a filter that will be evaluated
   # Movies matching ANY filter will be included in results
   
-  cleanup_tagged: hasTag("cleanup") or hasTag("remove")
+  # Request accountability - ensure users watch what they request
+  unwatched_requests_30d: notWatchedByRequester() and Added < daysAgo(30)
   
-  old_imports: FileImported < parseDate("2023-01-01") and not hasTag("keep")
+  # Storage management - free up space from unwatched content  
+  space_cleanup: not Watched and Added < monthsAgo(3) and not hasTag("keep")
   
-  user_watched: hasTag("10 - snekkern") and watchedBy("snekkern")
+  # Quality control - remove low-rated movies nobody requested
+  poor_quality: imdbRating() < 5.5 and notRequested() and Added < daysAgo(30)
   
-  recent_unwatched: daysSince(Added) < 30 and not Watched
+  # Time-based cleanup - progressive cleanup policy
+  cleanup_90d: not Watched and Added < daysAgo(90) and imdbRating() < 6
   
-  # Movies someone started but didn't finish
-  low_progress: WatchCount > 0 and WatchProgress < 50
-  
-  # Movies added over a year ago that nobody watched
-  old_and_unwatched: Added < yearsAgo(1) and WatchCount == 0
-  
-  # Movies a specific user started but watched less than 50%
-  specific_user_partial: watchProgressBy("guest") > 0 and watchProgressBy("guest") < 50
-  
-  # Movies requested by specific user that weren't watched
-  user_requested_unwatched: requestedBy("john") and not Watched
-  
-  # Old requests that are still unwatched
-  old_requests: requestedBefore(monthsAgo(6)) and not Watched
-  
-  # Movies not requested through Overseerr
-  manually_added: notRequested() and Added > monthsAgo(1)
+  # Tag-based removal
+  tagged_removal: hasTag("cleanup") or hasTag("remove")
 
 safety:
   dry_run: true
@@ -49,5 +38,4 @@ safety:
 
 logging:
   level: info        # debug, info, warn, error
-  format: console    # console or json
   color: true        # colorized console output

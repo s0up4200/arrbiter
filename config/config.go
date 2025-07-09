@@ -76,7 +76,6 @@ func setDefaults(v *viper.Viper) {
 
 	// Logging defaults
 	v.SetDefault("logging.level", "info")
-	v.SetDefault("logging.format", "console")
 	v.SetDefault("logging.color", true)
 }
 
@@ -99,15 +98,6 @@ func validate(cfg *Config) error {
 	}
 	if !validLevels[cfg.Logging.Level] {
 		return fmt.Errorf("invalid logging level: %s", cfg.Logging.Level)
-	}
-
-	// Validate logging format
-	validFormats := map[string]bool{
-		"console": true,
-		"json":    true,
-	}
-	if !validFormats[cfg.Logging.Format] {
-		return fmt.Errorf("invalid logging format: %s", cfg.Logging.Format)
 	}
 
 	return nil
@@ -169,8 +159,9 @@ overseerr:
 
 filter:
   # Example filters - customize these for your needs
-  old_unwatched: Added < yearsAgo(1) and not Watched
-  cleanup_tagged: hasTag("cleanup") or hasTag("remove")
+  unwatched_requests: notWatchedByRequester() and Added < daysAgo(30)
+  space_cleanup: not Watched and Added < monthsAgo(3) and not hasTag("keep")
+  poor_quality: imdbRating() < 5.5 and notRequested() and Added < daysAgo(30)
 
 safety:
   dry_run: true

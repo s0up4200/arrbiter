@@ -28,9 +28,8 @@ type SafetyConfig struct {
 
 // LoggingConfig contains logging configuration
 type LoggingConfig struct {
-	Level  string `mapstructure:"level"`
-	Format string `mapstructure:"format"`
-	Color  bool   `mapstructure:"color"`
+	Level string `mapstructure:"level"`
+	Color bool   `mapstructure:"color"`
 }
 
 // TautulliConfig holds Tautulli API connection details and watch settings

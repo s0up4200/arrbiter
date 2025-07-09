@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
+	"github.com/mattn/go-isatty"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 
@@ -129,16 +129,18 @@ func setupLogger(cfg config.LoggingConfig) zerolog.Logger {
 
 	zerolog.SetGlobalLevel(level)
 
-	// Configure output format
-	if cfg.Format == "json" {
-		return zerolog.New(os.Stderr).With().Timestamp().Logger()
+	// Always use console writer for CLI
+	// Auto-detect color support if not explicitly disabled
+	noColor := !cfg.Color
+	if cfg.Color && !isatty.IsTerminal(os.Stderr.Fd()) && !isatty.IsCygwinTerminal(os.Stderr.Fd()) {
+		// Disable color if not in a terminal (unless explicitly enabled in config)
+		noColor = true
 	}
 
-	// Console format
 	output := zerolog.ConsoleWriter{
 		Out:        os.Stderr,
-		TimeFormat: time.RFC3339,
-		NoColor:    !cfg.Color,
+		NoColor:    noColor,
+		TimeFormat: "15:04:05",
 	}
 
 	return zerolog.New(output).With().Timestamp().Logger()
@@ -202,8 +204,12 @@ func runList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Printf("\nFound %d movies:\n", len(matchedMovies))
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Printf("\nFound %d movie", len(matchedMovies))
+	if len(matchedMovies) != 1 {
+		fmt.Printf("s")
+	}
+	fmt.Println()
+	fmt.Println()
 
 	// Display movies grouped by filter
 	for filterName, movies := range moviesByFilter {
@@ -211,26 +217,49 @@ func runList(cmd *cobra.Command, args []string) error {
 			continue
 		}
 		
-		fmt.Printf("\nFrom filter \"%s\":\n", filterName)
-		for _, movie := range movies {
-			fmt.Printf("• %s (%d)\n", movie.Title, movie.Year)
+		fmt.Printf("\u256d\u2500 Filter: %s (%d match", filterName, len(movies))
+		if len(movies) != 1 {
+			fmt.Printf("es")
+		}
+		fmt.Println(")")
+		
+		for i, movie := range movies {
+			isLast := i == len(movies)-1
+			prefix := "\u251c"
+			if isLast {
+				prefix = "\u2570"
+			}
+			
+			fmt.Printf("%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
 			if cfg.Safety.ShowDetails {
+				indent := "\u2502   "
+				if isLast {
+					indent = "    "
+				}
+				
 				if len(movie.TagNames) > 0 {
-					fmt.Printf("  Tags: %s\n", strings.Join(movie.TagNames, ", "))
+					fmt.Printf("%sTags: %s\n", indent, strings.Join(movie.TagNames, ", "))
 				}
-				fmt.Printf("  Added: %s\n", movie.Added.Format("2006-01-02"))
+				
+				dateInfo := fmt.Sprintf("Added: %s", movie.Added.Format("2006-01-02"))
 				if !movie.FileImported.IsZero() {
-					fmt.Printf("  Imported: %s\n", movie.FileImported.Format("2006-01-02"))
+					dateInfo += fmt.Sprintf(" | Imported: %s", movie.FileImported.Format("2006-01-02"))
 				}
+				fmt.Printf("%s%s\n", indent, dateInfo)
+				
 				if movie.WatchCount > 0 {
-					fmt.Printf("  Watch Count: %d", movie.WatchCount)
+					watchInfo := fmt.Sprintf("Watched %dx", movie.WatchCount)
 					if !movie.LastWatched.IsZero() {
-						fmt.Printf(" (Last: %s)", movie.LastWatched.Format("2006-01-02"))
+						watchInfo += fmt.Sprintf(" (last: %s)", movie.LastWatched.Format("2006-01-02"))
 					}
-					fmt.Println()
+					fmt.Printf("%s%s\n", indent, watchInfo)
 				}
 			}
+			if i < len(movies)-1 && cfg.Safety.ShowDetails {
+				fmt.Printf("\u2502\n")
+			}
 		}
+		fmt.Println()
 	}
 
 	return nil
@@ -302,18 +331,33 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display what will be deleted, grouped by filter
-	fmt.Printf("\nFound %d movies to delete:\n", len(moviesToDelete))
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Printf("\nFound %d movie", len(moviesToDelete))
+	if len(moviesToDelete) != 1 {
+		fmt.Printf("s")
+	}
+	fmt.Println(" to delete")
+	fmt.Println()
 	
 	for filterName, movies := range moviesByFilter {
 		if len(movies) == 0 {
 			continue
 		}
 		
-		fmt.Printf("\nFrom filter \"%s\":\n", filterName)
-		for _, movie := range movies {
-			fmt.Printf("• %s (%d)\n", movie.Title, movie.Year)
+		fmt.Printf("\u256d\u2500 Filter: %s (%d match", filterName, len(movies))
+		if len(movies) != 1 {
+			fmt.Printf("es")
 		}
+		fmt.Println(")")
+		
+		for i, movie := range movies {
+			isLast := i == len(movies)-1
+			prefix := "\u251c"
+			if isLast {
+				prefix = "\u2570"
+			}
+			fmt.Printf("%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
+		}
+		fmt.Println()
 	}
 
 	// Check for watched movies if not ignoring

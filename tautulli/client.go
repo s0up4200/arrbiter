@@ -66,16 +66,15 @@ func (c *Client) TestConnection() error {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Log the response for debugging
-	c.logger.Debug().Interface("response", result).Msg("Tautulli response")
+	// Response received successfully
 
 	if response, ok := result["response"].(map[string]interface{}); ok {
 		if res, ok := response["result"].(string); ok && res == "success" {
 			return nil
 		}
-		// Log what we got instead
+		// Log unexpected result
 		if res, ok := response["result"]; ok {
-			c.logger.Error().Interface("result", res).Msg("Unexpected result value")
+			c.logger.Error().Str("result", fmt.Sprintf("%v", res)).Msg("Unexpected result value")
 		}
 		if msg, ok := response["message"]; ok {
 			return fmt.Errorf("Tautulli error: %v", msg)
