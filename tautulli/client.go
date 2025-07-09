@@ -49,7 +49,7 @@ func (c *Client) TestConnection() error {
 	}
 
 	requestURL := fmt.Sprintf("%s/api/v2?%s", c.baseURL, params.Encode())
-	c.logger.Debug().Str("url", requestURL).Msg("Testing Tautulli connection")
+	//c.logger.Debug().Str("url", requestURL).Msg("Testing Tautulli connection")
 
 	resp, err := c.httpClient.Get(requestURL)
 	if err != nil {

@@ -8,7 +8,9 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/s0up4200/arrbiter/overseerr"
+	"github.com/s0up4200/arrbiter/qbittorrent"
 	"github.com/s0up4200/arrbiter/tautulli"
+	"golift.io/starr/radarr"
 )
 
 // SearchOptions contains options for searching movies
@@ -26,11 +28,12 @@ type DeleteOptions struct {
 
 // Operations handles movie search and delete operations
 type Operations struct {
-	client          *Client
-	tautulliClient  *tautulli.Client
-	overseerrClient *overseerr.Client
-	logger          zerolog.Logger
-	minWatchPercent float64
+	client            *Client
+	tautulliClient    *tautulli.Client
+	overseerrClient   *overseerr.Client
+	qbittorrentClient *qbittorrent.Client
+	logger            zerolog.Logger
+	minWatchPercent   float64
 }
 
 // NewOperations creates a new Operations instance
@@ -388,4 +391,163 @@ func (o *Operations) confirmDeletion(count int) bool {
 	fmt.Scanln(&response)
 	
 	return strings.ToLower(strings.TrimSpace(response)) == "y"
+}
+
+// ImportOptions contains options for manual import operations
+type ImportOptions struct {
+	Path         string
+	MovieID      int64
+	ImportMode   string // "move" or "copy"
+	Quality      string
+	IncludeExtra bool
+}
+
+// ScanForImports scans a folder for importable movie files
+func (o *Operations) ScanForImports(ctx context.Context, opts ImportOptions) ([]*radarr.ManualImportOutput, error) {
+	params := &radarr.ManualImportParams{
+		Folder:              opts.Path,
+		FilterExistingFiles: true,
+	}
+	
+	// If specific movie ID provided, filter to that movie
+	if opts.MovieID > 0 {
+		params.MovieID = opts.MovieID
+	}
+	
+	o.logger.Info().Str("path", opts.Path).Msg("Scanning folder for importable movies")
+	
+	output, err := o.client.GetManualImportItems(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan for imports: %w", err)
+	}
+	
+	if output == nil || len(output) == 0 {
+		o.logger.Info().Msg("No importable files found")
+		return nil, nil
+	}
+	
+	o.logger.Info().Msgf("Found %d importable files", len(output))
+	return output, nil
+}
+
+// ImportMovies processes manual import of selected movie files
+func (o *Operations) ImportMovies(ctx context.Context, items []*radarr.ManualImportInput, opts ImportOptions) error {
+	if len(items) == 0 {
+		o.logger.Info().Msg("No items to import")
+		return nil
+	}
+	
+	o.logger.Info().Msgf("Importing %d files", len(items))
+	
+	// Process imports
+	if err := o.client.ProcessManualImport(ctx, items); err != nil {
+		return fmt.Errorf("import failed: %w", err)
+	}
+	
+	o.logger.Info().Msg("Import completed successfully")
+	return nil
+}
+
+// ConvertToImportInput converts ManualImportOutput items to ManualImportInput for processing
+func (o *Operations) ConvertToImportInput(outputs []*radarr.ManualImportOutput, importMode string) []*radarr.ManualImportInput {
+	var inputs []*radarr.ManualImportInput
+	
+	for _, output := range outputs {
+		// Skip items with rejections
+		if len(output.Rejections) > 0 {
+			continue
+		}
+		
+		// Skip if no movie is associated
+		if output.Movie == nil {
+			continue
+		}
+		
+		input := &radarr.ManualImportInput{
+			ID:                output.ID,
+			Path:              output.Path,
+			MovieID:           output.Movie.ID,
+			Movie:             output.Movie,
+			Quality:           output.Quality,
+			Languages:         output.Languages,
+			ReleaseGroup:      output.ReleaseGroup,
+			DownloadID:        output.DownloadID,
+			CustomFormats:     convertCustomFormats(output.CustomFormats),
+			CustomFormatScore: output.CustomFormatScore,
+		}
+		
+		inputs = append(inputs, input)
+	}
+	
+	return inputs
+}
+
+// convertCustomFormats converts CustomFormatOutput to CustomFormatInput
+func convertCustomFormats(outputs []*radarr.CustomFormatOutput) []*radarr.CustomFormatInput {
+	if outputs == nil {
+		return nil
+	}
+	
+	var inputs []*radarr.CustomFormatInput
+	for _, output := range outputs {
+		input := &radarr.CustomFormatInput{
+			ID:   output.ID,
+			Name: output.Name,
+		}
+		inputs = append(inputs, input)
+	}
+	return inputs
+}
+
+// PrintImportableItems displays importable items for user selection
+func (o *Operations) PrintImportableItems(items []*radarr.ManualImportOutput) {
+	fmt.Printf("\nFound %d importable file", len(items))
+	if len(items) != 1 {
+		fmt.Printf("s")
+	}
+	fmt.Println(":")
+	fmt.Println()
+	
+	for i, item := range items {
+		isLast := i == len(items)-1
+		prefix := "\u251c"
+		if isLast {
+			prefix = "\u2570"
+		}
+		
+		movieTitle := "Unknown Movie"
+		if item.Movie != nil {
+			movieTitle = fmt.Sprintf("%s (%d)", item.Movie.Title, item.Movie.Year)
+		}
+		
+		fmt.Printf("%s\u2500\u2500 %s\n", prefix, item.Path)
+		
+		indent := "\u2502   "
+		if isLast {
+			indent = "    "
+		}
+		
+		fmt.Printf("%sMovie: %s\n", indent, movieTitle)
+		
+		if item.Quality != nil && item.Quality.Quality != nil {
+			fmt.Printf("%sQuality: %s\n", indent, item.Quality.Quality.Name)
+		}
+		
+		if item.Size > 0 {
+			sizeMB := float64(item.Size) / 1024 / 1024
+			fmt.Printf("%sSize: %.2f MB\n", indent, sizeMB)
+		}
+		
+		if len(item.Rejections) > 0 {
+			fmt.Printf("%sRejections:\n", indent)
+			for _, rejection := range item.Rejections {
+				fmt.Printf("%s  - %s\n", indent, rejection.Reason)
+			}
+		}
+		
+		if i < len(items)-1 {
+			fmt.Printf("\u2502\n")
+		}
+	}
+	fmt.Println()
 }

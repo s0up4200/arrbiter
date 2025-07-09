@@ -11,6 +11,11 @@ overseerr:
   url: http://localhost:5055
   api_key: your-overseerr-api-key
 
+qbittorrent:
+  url: http://localhost:8080
+  username: admin
+  password: adminpass
+
 filter:
   # Each entry is a filter that will be evaluated
   # Movies matching ANY filter will be included in results

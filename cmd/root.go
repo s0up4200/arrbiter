@@ -9,10 +9,12 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
+	starr_radarr "golift.io/starr/radarr"
 
 	"github.com/s0up4200/arrbiter/config"
 	"github.com/s0up4200/arrbiter/filter"
 	"github.com/s0up4200/arrbiter/overseerr"
+	"github.com/s0up4200/arrbiter/qbittorrent"
 	"github.com/s0up4200/arrbiter/radarr"
 	"github.com/s0up4200/arrbiter/tautulli"
 )
@@ -40,7 +42,6 @@ var rootCmd = &cobra.Command{
 	Long: `Arrbiter is a CLI tool that intelligently manages your Radarr library
 using advanced filter expressions. It integrates with Tautulli for watch tracking
 and Overseerr for request management to make informed decisions about your media.`,
-	PersistentPreRunE: initializeApp,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -59,6 +60,7 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(testCmd)
+	rootCmd.AddCommand(importCmd)
 }
 
 // initializeApp initializes the configuration and clients
@@ -83,6 +85,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create Radarr client: %w", err)
 	}
+	logger.Info().Msg("Radarr integration enabled")
 
 	operations = radarr.NewOperations(radarrClient, logger)
 
@@ -106,6 +109,17 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 		} else {
 			operations.SetOverseerrClient(overseerrClient)
 			logger.Info().Msg("Overseerr integration enabled")
+		}
+	}
+
+	// Create qBittorrent client if URL and username are provided
+	if cfg.QBittorrent.URL != "" && cfg.QBittorrent.Username != "" {
+		qbittorrentClient, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to create qBittorrent client, continuing without torrent integration")
+		} else {
+			operations.SetQBittorrentClient(qbittorrentClient)
+			logger.Info().Msg("qBittorrent integration enabled")
 		}
 	}
 
@@ -151,6 +165,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List movies matching the filter criteria",
 	Long:  `List all movies in your Radarr library that match the specified filter criteria.`,
+	PreRunE: initializeApp,
 	RunE:  runList,
 }
 
@@ -270,6 +285,7 @@ var deleteCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Delete movies matching the filter criteria",
 	Long:  `Delete movies from your Radarr library that match the specified filter criteria.`,
+	PreRunE: initializeApp,
 	RunE:  runDelete,
 }
 
@@ -395,62 +411,158 @@ var testCmd = &cobra.Command{
 	Use:   "test",
 	Short: "Test connection to Radarr",
 	Long:  `Test the connection to your Radarr instance and display basic information.`,
+	PreRunE: initializeApp,
 	RunE:  runTest,
 }
 
 func runTest(cmd *cobra.Command, args []string) error {
-	fmt.Printf("Testing connection to Radarr at %s...\n", cfg.Radarr.URL)
-
-	// Connection is already tested during client creation
-	fmt.Println("✓ Connection successful!")
-
-	// Get some basic stats
-	ctx := context.Background()
-	movies, err := radarrClient.GetAllMovies(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get movies: %w", err)
-	}
-
-	tags, err := radarrClient.GetTags(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get tags: %w", err)
-	}
-
-	fmt.Printf("\nRadarr Statistics:\n")
-	fmt.Printf("- Total movies: %d\n", len(movies))
-	fmt.Printf("- Total tags: %d\n", len(tags))
-
-	if len(tags) > 0 {
-		fmt.Printf("\nAvailable tags:\n")
-		for _, tag := range tags {
-			fmt.Printf("  • %s (ID: %d)\n", tag.Label, tag.ID)
-		}
-	}
+	// Test Radarr
+	logger.Info().Str("url", cfg.Radarr.URL).Msg("Testing Radarr connection")
+	logger.Info().Msg("✓ Radarr connection successful")
 
 	// Test Tautulli if configured
 	if tautulliClient != nil {
-		fmt.Printf("\nTesting connection to Tautulli at %s...\n", cfg.Tautulli.URL)
-		fmt.Println("✓ Tautulli connection successful!")
-		fmt.Printf("- Minimum watch percent: %.0f%%\n", cfg.Tautulli.MinWatchPercent)
+		logger.Info().Str("url", cfg.Tautulli.URL).Msg("Testing Tautulli connection")
+		logger.Info().Msg("✓ Tautulli connection successful")
 	} else {
-		fmt.Println("\nTautulli integration: Not configured")
+		logger.Info().Msg("Tautulli integration: Not configured")
 	}
 	
 	// Test Overseerr if configured
 	if overseerrClient != nil {
-		fmt.Printf("\nTesting connection to Overseerr at %s...\n", cfg.Overseerr.URL)
-		fmt.Println("✓ Overseerr connection successful!")
+		logger.Info().Str("url", cfg.Overseerr.URL).Msg("Testing Overseerr connection")
+		logger.Info().Msg("✓ Overseerr connection successful")
 	} else {
-		fmt.Println("\nOverseerr integration: Not configured")
+		logger.Info().Msg("Overseerr integration: Not configured")
+	}
+
+	// Test qBittorrent if configured
+	if cfg.QBittorrent.URL != "" && cfg.QBittorrent.Username != "" {
+		logger.Info().Str("url", cfg.QBittorrent.URL).Msg("Testing qBittorrent connection")
+		// Try to create a client to test the connection
+		_, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
+		if err != nil {
+			logger.Error().Err(err).Msg("✗ qBittorrent connection failed")
+		} else {
+			logger.Info().Msg("✓ qBittorrent connection successful")
+		}
+	} else {
+		logger.Info().Msg("qBittorrent integration: Not configured")
 	}
 
 	return nil
 }
 
-func boolToStatus(b bool) string {
-	if b {
-		return "Enabled"
+
+// Import command variables
+var (
+	importPath   string
+	importMovieID int64
+	importMode   string
+	autoApprove  bool
+)
+
+// importCmd represents the import command
+var importCmd = &cobra.Command{
+	Use:   "import",
+	Short: "Manually import movie files into Radarr",
+	Long: `Scan a folder for movie files and import them into Radarr.
+This command allows you to manually import files that were not automatically
+processed by Radarr, such as files from qBittorrent that need to be re-imported.
+
+Import modes:
+- move: Moves files from source to Radarr's media folder (files are removed from source)
+- copy: Creates hardlinks when possible (same filesystem), copies when not (preserves source files)
+
+Use 'copy' mode when importing from qBittorrent to maintain seeding while saving disk space.`,
+	PreRunE: initializeApp,
+	RunE: runImport,
+}
+
+func init() {
+	importCmd.Flags().StringVarP(&importPath, "path", "p", "", "path to scan for importable movies (required)")
+	importCmd.Flags().Int64Var(&importMovieID, "movie-id", 0, "import files for a specific movie ID only")
+	importCmd.Flags().StringVar(&importMode, "mode", "move", "import mode: 'move' (removes source) or 'copy' (hardlinks/copies)")
+	importCmd.Flags().BoolVar(&autoApprove, "auto", false, "automatically import all valid files without confirmation")
+	
+	importCmd.MarkFlagRequired("path")
+}
+
+func runImport(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+	
+	// Validate import mode
+	if importMode != "move" && importMode != "copy" {
+		return fmt.Errorf("invalid import mode: %s (must be 'move' or 'copy')", importMode)
 	}
-	return "Disabled"
+	
+	// Create import options
+	opts := radarr.ImportOptions{
+		Path:       importPath,
+		MovieID:    importMovieID,
+		ImportMode: importMode,
+	}
+	
+	// Scan for importable files
+	logger.Info().Str("path", importPath).Msg("Scanning for importable movies")
+	items, err := operations.ScanForImports(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("failed to scan for imports: %w", err)
+	}
+	
+	if len(items) == 0 {
+		fmt.Println("No importable files found.")
+		return nil
+	}
+	
+	// Display found items
+	operations.PrintImportableItems(items)
+	
+	// Check for items with rejections
+	var validItems []*starr_radarr.ManualImportOutput
+	var rejectedCount int
+	for _, item := range items {
+		if len(item.Rejections) > 0 {
+			rejectedCount++
+		} else {
+			validItems = append(validItems, item)
+		}
+	}
+	
+	if rejectedCount > 0 {
+		fmt.Printf("\n⚠️  %d file(s) cannot be imported due to rejections\n", rejectedCount)
+	}
+	
+	if len(validItems) == 0 {
+		fmt.Println("\nNo valid files to import.")
+		return nil
+	}
+	
+	// Confirm import
+	if !autoApprove && !dryRun {
+		fmt.Printf("\nImport %d file(s) using %s mode? [y/N]: ", len(validItems), importMode)
+		var response string
+		fmt.Scanln(&response)
+		if strings.ToLower(strings.TrimSpace(response)) != "y" {
+			logger.Info().Msg("Import cancelled by user")
+			return nil
+		}
+	}
+	
+	if dryRun {
+		fmt.Printf("\n[DRY RUN] Would import %d file(s) using %s mode\n", len(validItems), importMode)
+		return nil
+	}
+	
+	// Convert to import input format
+	importInputs := operations.ConvertToImportInput(validItems, importMode)
+	
+	// Process imports
+	if err := operations.ImportMovies(ctx, importInputs, opts); err != nil {
+		return fmt.Errorf("import failed: %w", err)
+	}
+	
+	fmt.Printf("\n✓ Successfully imported %d file(s)\n", len(importInputs))
+	return nil
 }
 

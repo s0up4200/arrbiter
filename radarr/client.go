@@ -82,6 +82,41 @@ func (c *Client) GetTagByName(ctx context.Context, tagName string) (*starr.Tag, 
 	return nil, fmt.Errorf("tag not found: %s", tagName)
 }
 
+// GetManualImportItems scans a folder for importable movie files
+// Note: The starr library's ManualImport method returns a single output, but the actual
+// Radarr API returns an array. We need to work around this limitation.
+func (c *Client) GetManualImportItems(ctx context.Context, params *radarr.ManualImportParams) ([]*radarr.ManualImportOutput, error) {
+	// Unfortunately, the starr library doesn't expose the array response properly
+	// We'll use the single item response for now and note this as a limitation
+	output, err := c.client.ManualImportContext(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get manual import items: %w", err)
+	}
+	
+	// Return as array for consistency
+	if output != nil {
+		c.logger.Debug().Msg("Found 1 item for manual import")
+		return []*radarr.ManualImportOutput{output}, nil
+	}
+	
+	return nil, nil
+}
+
+// ProcessManualImport processes manual import of movie files
+func (c *Client) ProcessManualImport(ctx context.Context, items []*radarr.ManualImportInput) error {
+	// Process each item using the reprocess method
+	for _, item := range items {
+		err := c.client.ManualImportReprocessContext(ctx, item)
+		if err != nil {
+			return fmt.Errorf("failed to import file %s: %w", item.Path, err)
+		}
+		c.logger.Info().Str("path", item.Path).Int64("movie_id", item.MovieID).
+			Msg("Successfully imported movie file")
+	}
+	
+	return nil
+}
+
 // MovieInfo contains relevant movie information for filtering and display
 type MovieInfo struct {
 	ID           int64
@@ -114,6 +149,12 @@ type MovieInfo struct {
 	ApprovedBy       string    // Who approved the request
 	IsAutoRequest    bool      // Whether it was an automatic request
 	IsRequested      bool      // Whether movie was requested via Overseerr
+	// Hardlink data
+	HardlinkCount    uint32    // Number of hardlinks for the movie file
+	IsHardlinked     bool      // Whether file has multiple hardlinks (count > 1)
+	// qBittorrent data
+	QBittorrentHash  string    // Hash of matching torrent in qBittorrent
+	IsSeeding        bool      // Whether the movie is currently seeding
 }
 
 // UserWatchInfo contains watch information for a specific user

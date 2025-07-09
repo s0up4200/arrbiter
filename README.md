@@ -9,6 +9,9 @@ A CLI tool to manage and clean up Radarr movies based on advanced filter criteri
 - **Advanced Filtering**: Filter movies by tags, date added, date imported, and watch status
 - **Tautulli Integration**: Check if movies have been watched before deleting
 - **Overseerr Integration**: Filter based on who requested movies and when
+- **qBittorrent Integration**: Manage non-hardlinked movies and ensure proper hardlinking
+- **Manual Import**: Import movie files from folders with quality detection and validation
+- **Hardlink Management**: Detect and fix movies that aren't properly hardlinked
 - **Logical Operators**: Combine filters using AND, OR, and NOT operators
 - **Preset Filters**: Define reusable filter expressions in configuration
 - **Safety Features**: Dry-run mode, confirmation prompts, watched movie warnings
@@ -125,6 +128,24 @@ arrbiter delete
 
 # Actually delete them
 arrbiter delete --no-dry-run
+
+# Manually import movie files from a folder
+arrbiter import --path /path/to/movies
+
+# Import files for a specific movie only
+arrbiter import --path /downloads --movie-id 123
+
+# Import using copy mode to create hardlinks (useful for qBittorrent seeding)
+arrbiter import --path /downloads --mode copy --auto
+
+# Manage non-hardlinked movies (requires qBittorrent)
+arrbiter hardlink
+
+# Skip confirmation prompts
+arrbiter hardlink --no-confirm
+
+# Dry run to see what would be done
+arrbiter hardlink --dry-run
 ```
 
 The tool will process ALL filters defined in your config and show results grouped by which filter matched.
@@ -426,6 +447,42 @@ No additional options - processes all filters from config
 - `--delete-files`: Also delete movie files from disk (default: true)
 - `--ignore-watched`: Delete movies even if they have been watched
 
+### Import Command
+The import command allows you to manually import movie files into Radarr. This is particularly useful for:
+- Re-importing files from qBittorrent that need to be hardlinked
+- Processing files that failed automatic import
+- Importing movies from external drives or network shares
+
+Options:
+- `-p, --path`: Path to scan for importable movies (required)
+- `--movie-id`: Import files for a specific movie ID only
+- `--mode`: Import mode: 'move' or 'copy' (default: move)
+  - `move`: Moves files to Radarr's media folder
+  - `copy`: Hardlinks files when possible (same filesystem), copies when not
+- `--auto`: Automatically import all valid files without confirmation
+
+Example usage:
+```bash
+# Scan and import all valid movie files from a folder
+arrbiter import --path /downloads/movies
+
+# Import files for a specific movie only
+arrbiter import --path /downloads --movie-id 123
+
+# Use copy mode to hardlink (same filesystem) or copy (different filesystem)
+arrbiter import --path /mnt/external --mode copy
+
+# Auto-approve all valid imports
+arrbiter import --path /downloads --auto
+```
+
+The command will:
+1. Scan the specified folder for movie files
+2. Match them against your Radarr library
+3. Show quality and rejection information
+4. Prompt for confirmation (unless --auto is used)
+5. Import the files using Radarr's manual import API
+
 ## Tautulli Integration
 
 When Tautulli is enabled, the tool will check if movies have been watched before deletion. This helps prevent accidentally deleting movies that users have already viewed.
@@ -471,6 +528,70 @@ overseerr:
 2. Movies are matched by TMDB ID
 3. Request information includes who requested, when, status, and who approved
 4. The most recent request is used if multiple exist for the same movie
+
+## Hardlink Management
+
+The `hardlink` command helps ensure proper hardlinking between Radarr and qBittorrent, saving disk space and maintaining seeding capability.
+
+### Features
+
+- **Hardlink Detection**: Scans your Radarr library for movies that don't have hardlinks
+- **qBittorrent Integration**: Checks if non-hardlinked movies exist in qBittorrent
+- **Smart Re-importing**: Re-imports movies from qBittorrent to create proper hardlinks
+- **Cleanup Options**: Deletes and re-searches for movies not found in qBittorrent
+
+### Configuration
+
+```yaml
+qbittorrent:
+  url: http://localhost:8080
+  username: admin
+  password: adminpass
+```
+
+### Usage
+
+The hardlink command processes movies interactively, showing you each non-hardlinked movie and letting you decide what to do:
+
+```bash
+$ arrbiter hardlink
+
+Scanning for non-hardlinked movies...
+Found 3 non-hardlinked movies.
+
+[1/3] The Matrix (1999)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Path: /movies/The Matrix (1999)/The.Matrix.1999.1080p.mkv
+Size: 8.2 GB
+Hardlinks: 1 (not hardlinked)
+Status: ✓ Found in qBittorrent (actively seeding)
+
+→ Re-import from qBittorrent to create hardlink? [y/n/q]: y
+✓ Re-imported successfully
+
+[2/3] Inception (2010)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Path: /movies/Inception (2010)/Inception.2010.1080p.mkv
+Size: 12.1 GB
+Hardlinks: 1 (not hardlinked)
+Status: ✗ Not found in qBittorrent
+
+→ Delete file and search for new version? [y/n/q]: n
+⊘ Skipped
+```
+
+### How It Works
+
+1. **Detection**: Uses system calls to check the hardlink count of each movie file
+2. **qBittorrent Search**: For non-hardlinked files, searches qBittorrent for matching torrents
+3. **Re-import**: If found in qBittorrent, uses Radarr's manual import to create a hardlink
+4. **Cleanup**: If not found, optionally deletes the file and triggers a new search in Radarr
+
+### Requirements
+
+- Unix-like system (Linux, macOS, FreeBSD) - Windows not supported
+- qBittorrent with Web UI enabled
+- Radarr and qBittorrent must share the same filesystem for hardlinks to work
 
 ### Request Properties Available
 

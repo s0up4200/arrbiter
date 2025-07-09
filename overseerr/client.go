@@ -67,10 +67,10 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, params 
 	req.Header.Set("X-Api-Key", c.apiKey)
 	req.Header.Set("Accept", "application/json")
 
-	c.logger.Debug().
-		Str("method", method).
-		Str("url", url).
-		Msg("Making Overseerr API request")
+	//c.logger.Debug().
+	//	Str("method", method).
+	//	Str("url", url).
+	//	Msg("Making Overseerr API request")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -97,8 +97,8 @@ func (c *Client) TestConnection(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	
-	c.logger.Debug().Msg("Successfully connected to Overseerr")
+
+	//c.logger.Debug().Msg("Successfully connected to Overseerr")
 	return nil
 }
 
@@ -170,10 +170,10 @@ func (c *Client) GetMovieRequestsByTMDBID(ctx context.Context, tmdbID int64) ([]
 // ConvertToMovieRequest converts an Overseerr MediaRequest to our simplified MovieRequest
 func ConvertToMovieRequest(req MediaRequest) MovieRequest {
 	mr := MovieRequest{
-		RequestedBy:   req.RequestedBy.DisplayName,
+		RequestedBy:      req.RequestedBy.DisplayName,
 		RequestedByEmail: req.RequestedBy.Email,
-		RequestDate:   req.CreatedAt,
-		IsAutoRequest: req.IsAutoRequest,
+		RequestDate:      req.CreatedAt,
+		IsAutoRequest:    req.IsAutoRequest,
 	}
 
 	// Convert status

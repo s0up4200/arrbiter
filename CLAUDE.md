@@ -29,11 +29,13 @@ go install
 ./arrbiter list
 ./arrbiter delete --dry-run
 ./arrbiter test
+./arrbiter hardlink
+./arrbiter import --path /downloads
 ```
 
 ## Architecture Overview
 
-This is a CLI tool for managing Radarr movies with advanced filtering and Tautulli integration for watch status checking. The codebase follows a modular design with clear separation of concerns.
+This is a CLI tool for managing Radarr movies with advanced filtering, Tautulli integration for watch status checking, Overseerr integration for request tracking, and qBittorrent integration for hardlink management. The codebase follows a modular design with clear separation of concerns.
 
 ### Core Components
 
@@ -53,6 +55,7 @@ This is a CLI tool for managing Radarr movies with advanced filtering and Tautul
    - **Radarr Client** (`radarr/`): Wraps golift/starr library, provides movie management
    - **Tautulli Client** (`tautulli/`): Custom implementation for Plex watch history
    - **Overseerr Client** (`overseerr/`): Fetches movie request data (who requested, when, status)
+   - **qBittorrent Client** (`qbittorrent/`): Uses autobrr/go-qbittorrent for torrent management
    - All clients support batch operations for efficiency
 
 3. **Configuration** (`config/`)
@@ -63,9 +66,14 @@ This is a CLI tool for managing Radarr movies with advanced filtering and Tautul
 
 4. **CLI Framework** (`cmd/`)
    - Uses Cobra for command structure
-   - Three main commands: `list`, `delete`, `test`
+   - Main commands: `list`, `delete`, `test`, `import`, `hardlink`
    - No filter/preset flags - all filters from config are evaluated automatically
    - Results are grouped by which filter matched them
+
+5. **Hardlink Detection** (`hardlink/`)
+   - Unix-specific implementation using syscall for hardlink detection
+   - Functions: `HasHardlinks()`, `GetHardlinkCount()`, `AreHardlinked()`
+   - Windows returns unsupported error (hardlinks work differently on Windows)
 
 ### Key Design Decisions
 
@@ -95,9 +103,21 @@ The filter system uses the expr expression language (github.com/expr-lang/expr):
 3. Tags are fetched separately and mapped to movie TagNames for filtering
 4. If Tautulli enabled, enriches movies with per-user watch status via batch history API
 5. If Overseerr enabled, enriches movies with request data (requester, date, status) via API
-6. Each filter from config is evaluated against all movies using expr
-7. Results are grouped by filter name for display (showing which filter matched)
-8. For deletion, unique movies are collected (deduped) and deleted with optional file removal
+6. If qBittorrent enabled (for hardlink command), checks torrent status for non-hardlinked files
+7. Each filter from config is evaluated against all movies using expr
+8. Results are grouped by filter name for display (showing which filter matched)
+9. For deletion, unique movies are collected (deduped) and deleted with optional file removal
+
+### Hardlink Management Flow
+
+1. Scan all movies from Radarr and check hardlink count using system calls
+2. For non-hardlinked movies (Nlink = 1), check if they exist in qBittorrent
+3. If found in qBittorrent and seeding:
+   - Use Radarr's manual import to re-import the file
+   - This creates a hardlink between qBittorrent and Radarr directories
+4. If not found in qBittorrent:
+   - Optionally delete the file and trigger a new search in Radarr
+5. Process movies interactively with user confirmation for each action
 
 ## Common Development Tasks
 
@@ -108,6 +128,15 @@ The filter system uses the expr expression language (github.com/expr-lang/expr):
 4. Expose new properties in the expr evaluation environment (both at compile time and runtime)
 5. Update README.md with new properties and example usage
 6. Test with both simple and complex expressions
+
+### Adding New Commands
+1. Create new command file in `cmd/` directory (e.g., `hardlink.go`)
+2. Define command structure using Cobra with appropriate flags
+3. Implement business logic in relevant package (e.g., `radarr/hardlink_operations.go`)
+4. Add any new API clients in their own packages (e.g., `qbittorrent/`)
+5. Update configuration types in `config/types.go` if needed
+6. Initialize new clients in `cmd/root.go` during app initialization
+7. Update documentation in README.md and CLAUDE.md
 
 ### Testing Filters
 ```bash
@@ -138,7 +167,9 @@ Key implementation notes:
 When modifying API interactions:
 - Radarr operations should go through the Operations struct for consistency
 - Tautulli client should maintain batch processing for performance
+- qBittorrent client uses autobrr/go-qbittorrent library
 - Always handle API errors gracefully with logging
+- New clients should follow the existing pattern of wrapping external libraries
 
 ## Configuration Notes
 
@@ -147,5 +178,24 @@ The tool expects sensitive API keys in `config.yaml` (gitignored). Example confi
 Optional integrations:
 - Tautulli integration is enabled automatically when both `url` and `api_key` are provided
 - Overseerr integration is enabled automatically when both `url` and `api_key` are provided
+- qBittorrent integration is enabled automatically when `url` and `username` are provided
 
-Both integrations operate independently - just leave the configuration empty if you don't want to use them.
+All integrations operate independently - just leave the configuration empty if you don't want to use them.
+
+## Logging System
+
+The codebase uses zerolog for structured logging with the following characteristics:
+- Console output only (no JSON mode) with tree-style formatting
+- Smart terminal detection for color support using go-isatty
+- Log levels: trace, debug, info (default), warn, error
+- Timestamps in HH:MM:SS format
+- Clear separation between user output (fmt) and diagnostic logs (zerolog)
+
+## Release Process
+
+The project uses GitHub Actions with GoReleaser for automated releases:
+- Triggered on tags matching `v*` pattern
+- Go version: 1.24
+- Builds for multiple platforms via `.goreleaser.yml`
+- Creates GitHub releases with binaries
+- Homebrew tap formula in `Casks/arrbiter.rb`

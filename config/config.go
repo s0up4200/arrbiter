@@ -157,6 +157,11 @@ overseerr:
   url: http://localhost:5055
   api_key: your-overseerr-api-key
 
+qbittorrent:
+  url: http://localhost:8080
+  username: admin
+  password: adminpass
+
 filter:
   # Example filters - customize these for your needs
   unwatched_requests: notWatchedByRequester() and Added < daysAgo(30)

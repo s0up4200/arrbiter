@@ -2,12 +2,13 @@ package config
 
 // Config represents the complete configuration structure
 type Config struct {
-	Radarr    RadarrConfig    `mapstructure:"radarr"`
-	Tautulli  TautulliConfig  `mapstructure:"tautulli"`
-	Overseerr OverseerrConfig `mapstructure:"overseerr"`
-	Filter    FilterConfig    `mapstructure:"filter"`
-	Safety    SafetyConfig    `mapstructure:"safety"`
-	Logging   LoggingConfig   `mapstructure:"logging"`
+	Radarr      RadarrConfig      `mapstructure:"radarr"`
+	Tautulli    TautulliConfig    `mapstructure:"tautulli"`
+	Overseerr   OverseerrConfig   `mapstructure:"overseerr"`
+	QBittorrent QBittorrentConfig `mapstructure:"qbittorrent"`
+	Filter      FilterConfig      `mapstructure:"filter"`
+	Safety      SafetyConfig      `mapstructure:"safety"`
+	Logging     LoggingConfig     `mapstructure:"logging"`
 }
 
 // RadarrConfig holds Radarr API connection details
@@ -43,4 +44,11 @@ type TautulliConfig struct {
 type OverseerrConfig struct {
 	URL    string `mapstructure:"url"`
 	APIKey string `mapstructure:"api_key"`
+}
+
+// QBittorrentConfig holds qBittorrent API connection details
+type QBittorrentConfig struct {
+	URL      string `mapstructure:"url"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
 }
