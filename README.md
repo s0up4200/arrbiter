@@ -456,9 +456,9 @@ The import command allows you to manually import movie files into Radarr. This i
 Options:
 - `-p, --path`: Path to scan for importable movies (required)
 - `--movie-id`: Import files for a specific movie ID only
-- `--mode`: Import mode: 'move' or 'copy' (default: move)
-  - `move`: Moves files to Radarr's media folder
-  - `copy`: Hardlinks files when possible (same filesystem), copies when not
+- `--mode`: Import mode: 'move' or 'copy' (default: copy)
+  - `move`: Moves files to Radarr's media folder (removes source files)
+  - `copy`: Hardlinks files when possible (same filesystem), copies when not (preserves source files)
 - `--auto`: Automatically import all valid files without confirmation
 
 Example usage:

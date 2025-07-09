@@ -482,7 +482,7 @@ Use 'copy' mode when importing from qBittorrent to maintain seeding while saving
 func init() {
 	importCmd.Flags().StringVarP(&importPath, "path", "p", "", "path to scan for importable movies (required)")
 	importCmd.Flags().Int64Var(&importMovieID, "movie-id", 0, "import files for a specific movie ID only")
-	importCmd.Flags().StringVar(&importMode, "mode", "move", "import mode: 'move' (removes source) or 'copy' (hardlinks/copies)")
+	importCmd.Flags().StringVar(&importMode, "mode", "copy", "import mode: 'move' (removes source) or 'copy' (hardlinks/copies)")
 	importCmd.Flags().BoolVar(&autoApprove, "auto", false, "automatically import all valid files without confirmation")
 	
 	importCmd.MarkFlagRequired("path")

@@ -57,7 +57,7 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 	if len(nonHardlinkedMovies) != 1 {
 		fmt.Printf("s")
 	}
-	fmt.Println(".\n")
+	fmt.Println(".")
 
 	// Process each movie interactively
 	var processedCount, reimportedCount, deletedCount, skippedCount int
