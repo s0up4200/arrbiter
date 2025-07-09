@@ -98,7 +98,7 @@ changelog:
 
 homebrew_casks:
   - name: arrbiter
-    folder: Casks
+    directory: Casks
     repository:
       owner: s0up4200
       name: arrbiter
