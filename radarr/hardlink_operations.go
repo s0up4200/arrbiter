@@ -22,13 +22,20 @@ func (o *Operations) SetQBittorrentClient(client *qbittorrent.Client) {
 
 // ScanNonHardlinkedMovies scans for movies that are not hardlinked
 func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, error) {
-	// Get all movies
-	movies, err := o.GetAllMovies(ctx)
+	// Get all movies from Radarr without enrichment
+	movies, err := o.client.GetAllMovies(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get movies: %w", err)
 	}
 
+	// Get tags for mapping
+	tags, err := o.client.GetTags(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tags: %w", err)
+	}
+
 	var nonHardlinkedMovies []MovieInfo
+	var processedCount int
 
 	// Check hardlink status for each movie
 	for _, movie := range movies {
@@ -37,39 +44,49 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 			continue
 		}
 
+		// Convert to MovieInfo
+		info := o.client.GetMovieInfo(movie, tags)
+		
+		// Only process movies with imported files
+		if info.FileImported.IsZero() {
+			continue
+		}
+
+		processedCount++
+
 		// Check hardlink count
 		count, err := hardlink.GetHardlinkCount(movie.MovieFile.Path)
 		if err != nil {
 			o.logger.Warn().
 				Err(err).
-				Str("movie", movie.Title).
+				Str("movie", info.Title).
 				Str("path", movie.MovieFile.Path).
 				Msg("Failed to check hardlink status")
 			continue
 		}
 
-		movie.HardlinkCount = count
-		movie.IsHardlinked = count > 1
+		info.HardlinkCount = count
+		info.IsHardlinked = count > 1
 
 		// Only process non-hardlinked movies
-		if !movie.IsHardlinked {
+		if !info.IsHardlinked {
 			// Check if movie exists in qBittorrent if client is available
 			if o.qbittorrentClient != nil {
 				torrent, err := o.qbittorrentClient.GetTorrentByPath(ctx, movie.MovieFile.Path)
 				if err != nil {
-					o.logger.Warn().Err(err).Str("movie", movie.Title).Msg("Failed to check qBittorrent status")
+					o.logger.Warn().Err(err).Str("movie", info.Title).Msg("Failed to check qBittorrent status")
 				} else if torrent != nil {
-					movie.QBittorrentHash = torrent.Hash
-					movie.IsSeeding = torrent.IsSeeding
+					info.QBittorrentHash = torrent.Hash
+					info.IsSeeding = torrent.IsSeeding
 				}
 			}
 
-			nonHardlinkedMovies = append(nonHardlinkedMovies, movie)
+			nonHardlinkedMovies = append(nonHardlinkedMovies, info)
 		}
 	}
 
 	o.logger.Info().
-		Int("total", len(movies)).
+		Int("total", processedCount).
 		Int("non_hardlinked", len(nonHardlinkedMovies)).
 		Msg("Completed hardlink scan")
 
