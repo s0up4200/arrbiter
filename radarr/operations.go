@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
-	"github.com/soup/radarr-cleanup/overseerr"
-	"github.com/soup/radarr-cleanup/tautulli"
+	"github.com/s0up4200/arrbiter/overseerr"
+	"github.com/s0up4200/arrbiter/tautulli"
 )
 
 // SearchOptions contains options for searching movies

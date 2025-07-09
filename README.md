@@ -1,4 +1,6 @@
-# Radarr Cleanup
+# Arrbiter
+
+> Your media library's arbiter of taste
 
 A CLI tool to manage and clean up Radarr movies based on advanced filter criteria, with optional Tautulli and Overseerr integration for watch status and request tracking.
 
@@ -15,14 +17,14 @@ A CLI tool to manage and clean up Radarr movies based on advanced filter criteri
 ## Installation
 
 ```bash
-go install github.com/soup/radarr-cleanup@latest
+go install github.com/s0up4200/arrbiter@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/soup/radarr-cleanup.git
-cd radarr-cleanup
+git clone https://github.com/s0up4200/arrbiter.git
+cd arrbiter
 go build
 ```
 
@@ -52,8 +54,8 @@ go build
 
 The tool will look for `config.yaml` in:
 - Current directory
-- `~/.radarr-cleanup/`
-- `/etc/radarr-cleanup/`
+- `~/.arrbiter/`
+- `/etc/arrbiter/`
 
 ## Usage
 
@@ -72,13 +74,13 @@ Then run the tool:
 
 ```bash
 # List all movies matching ANY of your filters
-radarr-cleanup list
+arrbiter list
 
 # Delete them (dry-run first to see what would be deleted)
-radarr-cleanup delete
+arrbiter delete
 
 # Actually delete them
-radarr-cleanup delete --no-dry-run
+arrbiter delete --no-dry-run
 ```
 
 The tool will process ALL filters defined in your config and show results grouped by which filter matched.
@@ -87,17 +89,17 @@ The tool will process ALL filters defined in your config and show results groupe
 
 Test connection:
 ```bash
-radarr-cleanup test
+arrbiter test
 ```
 
 Skip confirmation when deleting:
 ```bash
-radarr-cleanup delete --no-confirm
+arrbiter delete --no-confirm
 ```
 
 Keep files on disk when deleting from Radarr:
 ```bash
-radarr-cleanup delete --delete-files=false
+arrbiter delete --delete-files=false
 ```
 
 ## Filter Expression Syntax

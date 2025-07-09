@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/soup/radarr-cleanup/radarr"
+	"github.com/s0up4200/arrbiter/radarr"
 )
 
 // Evaluate implements the Evaluate method for FieldFilter

@@ -1,4 +1,4 @@
-module github.com/soup/radarr-cleanup
+module github.com/s0up4200/arrbiter
 
 go 1.24.4
 

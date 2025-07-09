@@ -27,11 +27,11 @@ func Load(configPath string) (*Config, error) {
 
 		// Check home directory
 		if home, err := os.UserHomeDir(); err == nil {
-			v.AddConfigPath(filepath.Join(home, ".radarr-cleanup"))
+			v.AddConfigPath(filepath.Join(home, ".arrbiter"))
 		}
 
 		// Check /etc
-		v.AddConfigPath("/etc/radarr-cleanup/")
+		v.AddConfigPath("/etc/arrbiter/")
 	}
 
 	// Read config file

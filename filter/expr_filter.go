@@ -7,7 +7,7 @@ import (
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
-	"github.com/soup/radarr-cleanup/radarr"
+	"github.com/s0up4200/arrbiter/radarr"
 )
 
 // ExprFilter represents a compiled expr filter

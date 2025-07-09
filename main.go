@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/soup/radarr-cleanup/cmd"
+	"github.com/s0up4200/arrbiter/cmd"
 )
 
 func main() {

@@ -26,9 +26,9 @@ go test -v ./...
 go install
 
 # Run the binary directly after building
-./radarr-cleanup list
-./radarr-cleanup delete --dry-run
-./radarr-cleanup test
+./arrbiter list
+./arrbiter delete --dry-run
+./arrbiter test
 ```
 
 ## Architecture Overview
@@ -112,10 +112,10 @@ The filter system uses the expr expression language (github.com/expr-lang/expr):
 ### Testing Filters
 ```bash
 # Test filter syntax without making changes
-./radarr-cleanup list
+./arrbiter list
 
 # Test with specific debug output
-./radarr-cleanup list 2>&1 | grep "Processing filter"
+./arrbiter list 2>&1 | grep "Processing filter"
 ```
 
 ### Filter Expression Details

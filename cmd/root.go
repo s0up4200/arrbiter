@@ -10,11 +10,11 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 
-	"github.com/soup/radarr-cleanup/config"
-	"github.com/soup/radarr-cleanup/filter"
-	"github.com/soup/radarr-cleanup/overseerr"
-	"github.com/soup/radarr-cleanup/radarr"
-	"github.com/soup/radarr-cleanup/tautulli"
+	"github.com/s0up4200/arrbiter/config"
+	"github.com/s0up4200/arrbiter/filter"
+	"github.com/s0up4200/arrbiter/overseerr"
+	"github.com/s0up4200/arrbiter/radarr"
+	"github.com/s0up4200/arrbiter/tautulli"
 )
 
 var (
@@ -35,11 +35,11 @@ var (
 
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
-	Use:   "radarr-cleanup",
-	Short: "A tool to manage and clean up Radarr movies based on filters",
-	Long: `radarr-cleanup is a CLI tool that allows you to search and delete movies
-from your Radarr library based on various filter criteria including tags,
-date added, and date imported.`,
+	Use:   "arrbiter",
+	Short: "Your media library's arbiter of taste",
+	Long: `Arrbiter is a CLI tool that intelligently manages your Radarr library
+using advanced filter expressions. It integrates with Tautulli for watch tracking
+and Overseerr for request management to make informed decisions about your media.`,
 	PersistentPreRunE: initializeApp,
 }
 
