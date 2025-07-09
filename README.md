@@ -20,8 +20,35 @@ A CLI tool to manage and clean up Radarr movies based on advanced filter criteri
 
 ```bash
 brew tap s0up4200/arrbiter https://github.com/s0up4200/arrbiter
-brew install arrbiter
+brew install --cask arrbiter
 ```
+
+### Manual Download
+
+Download the latest release for your platform:
+
+#### Linux (x86_64)
+```bash
+wget $(curl -s https://api.github.com/repos/s0up4200/arrbiter/releases/latest | grep download | grep Linux_x86_64 | cut -d\" -f4)
+sudo tar -C /usr/local/bin -xzf arrbiter*.tar.gz
+```
+
+#### FreeBSD (x86_64)
+```bash
+wget $(curl -s https://api.github.com/repos/s0up4200/arrbiter/releases/latest | grep download | grep Freebsd_x86_64 | cut -d\" -f4)
+sudo tar -C /usr/local/bin -xzf arrbiter*.tar.gz
+```
+
+#### Windows (x86_64)
+```powershell
+# PowerShell
+$latest = Invoke-RestMethod -Uri https://api.github.com/repos/s0up4200/arrbiter/releases/latest
+$url = $latest.assets | Where-Object { $_.name -match "Windows_x86_64.zip" } | Select-Object -ExpandProperty browser_download_url
+Invoke-WebRequest -Uri $url -OutFile "arrbiter.zip"
+# Extract and add to PATH manually
+```
+
+> **Note**: More platforms and architectures (macOS, ARM, etc.) are available on the [releases page](https://github.com/s0up4200/arrbiter/releases).
 
 ### Go Install
 
