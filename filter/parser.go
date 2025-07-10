@@ -10,10 +10,10 @@ import (
 
 // Parser parses filter expressions
 type Parser struct {
-	input       string
-	position    int
-	tokens      []Token
-	currentIdx  int // Renamed to avoid conflict with current() method
+	input      string
+	position   int
+	tokens     []Token
+	currentIdx int // Renamed to avoid conflict with current() method
 }
 
 // NewParser creates a new parser
@@ -80,7 +80,7 @@ func (p *Parser) tokenize() error {
 				return err
 			}
 			p.tokens = append(p.tokens, Token{Type: TokenValue, Value: value})
-			
+
 			// Special handling for watch_count_by which needs a second operator and value
 			if field == "watch_count_by" {
 				// Look for comparison operator and number
@@ -91,7 +91,7 @@ func (p *Parser) tokenize() error {
 					compOp, err := p.consumeOperator()
 					if err == nil {
 						p.tokens = append(p.tokens, Token{Type: TokenOperator, Value: compOp})
-						
+
 						// Get the number value
 						p.skipWhitespace()
 						numValue, err := p.consumeValue()
@@ -182,14 +182,14 @@ func (p *Parser) consumeField() (string, error) {
 func (p *Parser) consumeOperator() (string, error) {
 	// Check two-character operators first
 	if p.position+1 < len(p.input) {
-		twoChar := p.input[p.position:p.position+2]
+		twoChar := p.input[p.position : p.position+2]
 		switch twoChar {
 		case "!:", ">=", "<=":
 			p.position += 2
 			return twoChar, nil
 		}
 	}
-	
+
 	// Check single-character operators
 	switch p.current() {
 	case ':', '>', '<':
@@ -197,7 +197,7 @@ func (p *Parser) consumeOperator() (string, error) {
 		p.position++
 		return op, nil
 	}
-	
+
 	return "", &ParseError{
 		Message:  "expected operator (:, !:, >, <, >=, <=)",
 		Position: p.position,
@@ -337,17 +337,17 @@ func (p *Parser) parsePrimary() (Filter, error) {
 			if p.currentIdx < len(p.tokens)-1 && p.tokens[p.currentIdx].Type == TokenOperator {
 				compOp := p.tokens[p.currentIdx].Value
 				p.currentIdx++
-				
+
 				if p.currentIdx < len(p.tokens) && p.tokens[p.currentIdx].Type == TokenValue {
 					countStr := p.tokens[p.currentIdx].Value
 					p.currentIdx++
-					
+
 					// Parse the count
 					count, err := strconv.Atoi(countStr)
 					if err != nil {
 						return nil, &ParseError{Message: fmt.Sprintf("invalid count for watch_count_by: %s", countStr)}
 					}
-					
+
 					// Create a special filter that includes both username and count
 					return &FieldFilter{
 						Field:    FieldType("watch_count_by"),

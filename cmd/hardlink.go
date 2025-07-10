@@ -23,12 +23,12 @@ This command helps ensure proper hardlinking between Radarr and qBittorrent by:
 - Re-importing movies that exist in qBittorrent to create hardlinks
 - Optionally deleting and re-searching for movies not in qBittorrent`,
 	PreRunE: initializeApp,
-	RunE: runHardlink,
+	RunE:    runHardlink,
 }
 
 func init() {
 	rootCmd.AddCommand(hardlinkCmd)
-	
+
 	hardlinkCmd.Flags().BoolVar(&noConfirmHardlink, "no-confirm", false, "skip confirmation prompts")
 }
 
@@ -42,7 +42,7 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 
 	// Scan for non-hardlinked movies
 	logger.Info().Msg("Scanning for non-hardlinked movies...")
-	
+
 	nonHardlinkedMovies, err := operations.ScanNonHardlinkedMovies(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to scan for non-hardlinked movies: %w", err)
@@ -66,7 +66,7 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 		// Display movie information
 		fmt.Printf("[%d/%d] %s (%d)\n", i+1, len(nonHardlinkedMovies), movie.Title, movie.Year)
 		fmt.Println(strings.Repeat("━", 50))
-		
+
 		if movie.MovieFile != nil && movie.MovieFile.Path != "" {
 			fmt.Printf("Path: %s\n", movie.MovieFile.Path)
 			if movie.MovieFile.Size > 0 {
@@ -78,13 +78,13 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 				}
 			}
 		}
-		
+
 		fmt.Printf("Hardlinks: %d (not hardlinked)\n", movie.HardlinkCount)
-		
+
 		// Show qBittorrent status
 		if movie.IsSeeding {
 			fmt.Printf("Status: ✓ Found in qBittorrent (actively seeding)\n\n")
-			
+
 			// Ask to re-import
 			if !dryRun {
 				response := "n"
@@ -94,9 +94,9 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 				} else {
 					response = "y"
 				}
-				
+
 				response = strings.ToLower(strings.TrimSpace(response))
-				
+
 				if response == "q" || response == "quit" {
 					fmt.Printf("\nProcessing stopped by user.\n")
 					break
@@ -118,7 +118,7 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 			}
 		} else {
 			fmt.Printf("Status: ✗ Not found in qBittorrent\n\n")
-			
+
 			// Ask to delete and re-search
 			if !dryRun {
 				response := "n"
@@ -128,9 +128,9 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 				} else {
 					response = "y"
 				}
-				
+
 				response = strings.ToLower(strings.TrimSpace(response))
-				
+
 				if response == "q" || response == "quit" {
 					fmt.Printf("\nProcessing stopped by user.\n")
 					break
@@ -151,7 +151,7 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 				fmt.Printf("[DRY RUN] Would delete and re-search\n")
 			}
 		}
-		
+
 		processedCount++
 		fmt.Println() // Empty line between movies
 	}
@@ -164,7 +164,7 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 		fmt.Printf("s")
 	}
 	fmt.Println()
-	
+
 	if !dryRun {
 		if reimportedCount > 0 {
 			fmt.Printf("- Re-imported: %d\n", reimportedCount)
@@ -175,7 +175,7 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 		if skippedCount > 0 {
 			fmt.Printf("- Skipped: %d\n", skippedCount)
 		}
-		
+
 		remaining := len(nonHardlinkedMovies) - processedCount
 		if remaining > 0 {
 			fmt.Printf("Remaining: %d movie", remaining)

@@ -20,12 +20,12 @@ type Client struct {
 func NewClient(url, apiKey string, logger zerolog.Logger) (*Client, error) {
 	config := starr.New(apiKey, url, 30*time.Second)
 	radarrClient := radarr.New(config)
-	
+
 	// Test the connection
 	if err := radarrClient.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to connect to Radarr: %w", err)
 	}
-	
+
 	return &Client{
 		client: radarrClient,
 		logger: logger,
@@ -38,7 +38,7 @@ func (c *Client) GetAllMovies(ctx context.Context) ([]*radarr.Movie, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get movies: %w", err)
 	}
-	
+
 	c.logger.Debug().Msgf("Retrieved %d movies from Radarr", len(movies))
 	return movies, nil
 }
@@ -49,7 +49,7 @@ func (c *Client) GetTags(ctx context.Context) ([]*starr.Tag, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tags: %w", err)
 	}
-	
+
 	c.logger.Debug().Msgf("Retrieved %d tags from Radarr", len(tags))
 	return tags, nil
 }
@@ -60,7 +60,7 @@ func (c *Client) DeleteMovie(ctx context.Context, movieID int64, deleteFiles boo
 	if err != nil {
 		return fmt.Errorf("failed to delete movie ID %d: %w", movieID, err)
 	}
-	
+
 	c.logger.Info().Int64("movie_id", movieID).Bool("delete_files", deleteFiles).
 		Msg("Successfully deleted movie")
 	return nil
@@ -72,13 +72,13 @@ func (c *Client) GetTagByName(ctx context.Context, tagName string) (*starr.Tag, 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for _, tag := range tags {
 		if tag.Label == tagName {
 			return tag, nil
 		}
 	}
-	
+
 	return nil, fmt.Errorf("tag not found: %s", tagName)
 }
 
@@ -92,13 +92,13 @@ func (c *Client) GetManualImportItems(ctx context.Context, params *radarr.Manual
 	if err != nil {
 		return nil, fmt.Errorf("failed to get manual import items: %w", err)
 	}
-	
+
 	// Return as array for consistency
 	if output != nil {
 		c.logger.Debug().Msg("Found 1 item for manual import")
 		return []*radarr.ManualImportOutput{output}, nil
 	}
-	
+
 	return nil, nil
 }
 
@@ -113,7 +113,7 @@ func (c *Client) ProcessManualImport(ctx context.Context, items []*radarr.Manual
 		c.logger.Info().Str("path", item.Path).Int64("movie_id", item.MovieID).
 			Msg("Successfully imported movie file")
 	}
-	
+
 	return nil
 }
 
@@ -150,32 +150,32 @@ type MovieInfo struct {
 	IsAutoRequest    bool      // Whether it was an automatic request
 	IsRequested      bool      // Whether movie was requested via Overseerr
 	// Hardlink data
-	HardlinkCount    uint32    // Number of hardlinks for the movie file
-	IsHardlinked     bool      // Whether file has multiple hardlinks (count > 1)
+	HardlinkCount uint32 // Number of hardlinks for the movie file
+	IsHardlinked  bool   // Whether file has multiple hardlinks (count > 1)
 	// qBittorrent data
-	QBittorrentHash  string    // Hash of matching torrent in qBittorrent
-	IsSeeding        bool      // Whether the movie is currently seeding
+	QBittorrentHash string // Hash of matching torrent in qBittorrent
+	IsSeeding       bool   // Whether the movie is currently seeding
 }
 
 // UserWatchInfo contains watch information for a specific user
 type UserWatchInfo struct {
-	Username      string
-	Watched       bool
-	WatchCount    int
-	LastWatched   time.Time
-	MaxProgress   float64
+	Username    string
+	Watched     bool
+	WatchCount  int
+	LastWatched time.Time
+	MaxProgress float64
 }
 
 // GetMovieInfo converts a Radarr movie to our MovieInfo struct
 func (c *Client) GetMovieInfo(movie *radarr.Movie, tags []*starr.Tag) MovieInfo {
 	info := MovieInfo{
-		ID:       movie.ID,
-		Title:    movie.Title,
-		Year:     movie.Year,
-		TMDBID:   movie.TmdbID,
-		IMDBID:   movie.ImdbID,
-		Path:     movie.Path,
-		Tags:     movie.Tags,
+		ID:            movie.ID,
+		Title:         movie.Title,
+		Year:          movie.Year,
+		TMDBID:        movie.TmdbID,
+		IMDBID:        movie.ImdbID,
+		Path:          movie.Path,
+		Tags:          movie.Tags,
 		TagNames:      make([]string, 0),
 		Added:         movie.Added,
 		HasFile:       movie.HasFile,
@@ -183,27 +183,27 @@ func (c *Client) GetMovieInfo(movie *radarr.Movie, tags []*starr.Tag) MovieInfo 
 		Ratings:       make(map[string]float64),
 		Popularity:    movie.Popularity,
 	}
-	
+
 	// Map tag IDs to names
 	tagMap := make(map[int]string)
 	for _, tag := range tags {
 		tagMap[tag.ID] = tag.Label
 	}
-	
+
 	for _, tagID := range movie.Tags {
 		if tagName, ok := tagMap[tagID]; ok {
 			info.TagNames = append(info.TagNames, tagName)
 		}
 	}
-	
+
 	// Get file information
 	if movie.MovieFile != nil {
 		info.MovieFile = movie.MovieFile
-		if movie.MovieFile.DateAdded.IsZero() == false {
+		if !movie.MovieFile.DateAdded.IsZero() {
 			info.FileImported = movie.MovieFile.DateAdded
 		}
 	}
-	
+
 	// Extract ratings
 	if movie.Ratings != nil {
 		for source, rating := range movie.Ratings {
@@ -212,6 +212,6 @@ func (c *Client) GetMovieInfo(movie *radarr.Movie, tags []*starr.Tag) MovieInfo 
 			}
 		}
 	}
-	
+
 	return info
 }

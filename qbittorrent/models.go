@@ -4,22 +4,22 @@ import "time"
 
 // TorrentInfo contains information about a torrent
 type TorrentInfo struct {
-	Hash            string
-	Name            string
-	SavePath        string
-	ContentPath     string
-	State           string
-	Size            int64
-	Progress        float64
-	DownloadedSize  int64
-	UploadedSize    int64
-	Ratio           float64
-	AddedOn         time.Time
-	CompletionOn    time.Time
-	Category        string
-	Tags            []string
-	IsSeeding       bool
-	Files           []string
+	Hash           string
+	Name           string
+	SavePath       string
+	ContentPath    string
+	State          string
+	Size           int64
+	Progress       float64
+	DownloadedSize int64
+	UploadedSize   int64
+	Ratio          float64
+	AddedOn        time.Time
+	CompletionOn   time.Time
+	Category       string
+	Tags           []string
+	IsSeeding      bool
+	Files          []string
 }
 
 // IsActivelySeeding checks if the torrent is actively seeding

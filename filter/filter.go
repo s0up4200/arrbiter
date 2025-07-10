@@ -14,14 +14,14 @@ func (f *FieldFilter) Evaluate(movie interface{}) bool {
 	if !ok {
 		return false
 	}
-	
+
 	switch f.Field {
 	case FieldTag:
 		tagValue, ok := f.Value.(string)
 		if !ok {
 			return false
 		}
-		
+
 		// Check if the movie has the specified tag
 		for _, tag := range info.TagNames {
 			matches := strings.EqualFold(tag, tagValue)
@@ -34,7 +34,7 @@ func (f *FieldFilter) Evaluate(movie interface{}) bool {
 		}
 		// If we didn't find the tag
 		return f.Operator == OpNotEquals
-		
+
 	case FieldAddedBefore:
 		dateValue, ok := f.Value.(time.Time)
 		if !ok {
@@ -45,7 +45,7 @@ func (f *FieldFilter) Evaluate(movie interface{}) bool {
 			return !result
 		}
 		return result
-		
+
 	case FieldAddedAfter:
 		dateValue, ok := f.Value.(time.Time)
 		if !ok {
@@ -56,7 +56,7 @@ func (f *FieldFilter) Evaluate(movie interface{}) bool {
 			return !result
 		}
 		return result
-		
+
 	case FieldImportedBefore:
 		dateValue, ok := f.Value.(time.Time)
 		if !ok {
@@ -71,7 +71,7 @@ func (f *FieldFilter) Evaluate(movie interface{}) bool {
 			return !result
 		}
 		return result
-		
+
 	case FieldImportedAfter:
 		dateValue, ok := f.Value.(time.Time)
 		if !ok {
@@ -86,7 +86,7 @@ func (f *FieldFilter) Evaluate(movie interface{}) bool {
 			return !result
 		}
 		return result
-		
+
 	case FieldWatched:
 		boolValue, ok := f.Value.(bool)
 		if !ok {
@@ -97,20 +97,20 @@ func (f *FieldFilter) Evaluate(movie interface{}) bool {
 			return !result
 		}
 		return result
-		
+
 	case FieldWatchCount:
 		intValue, ok := f.Value.(int)
 		if !ok {
 			return false
 		}
 		return compareInt(info.WatchCount, intValue, f.Operator)
-		
+
 	case FieldWatchedBy:
 		username, ok := f.Value.(string)
 		if !ok {
 			return false
 		}
-		
+
 		// Check if user has watched this movie
 		if userData, exists := info.UserWatchData[username]; exists {
 			result := userData.Watched
@@ -119,31 +119,31 @@ func (f *FieldFilter) Evaluate(movie interface{}) bool {
 			}
 			return result
 		}
-		
+
 		// User hasn't watched if no data exists
 		return f.Operator == OpNotEquals
-		
+
 	case FieldWatchCountBy:
 		username, ok := f.Value.(string)
 		if !ok {
 			return false
 		}
-		
+
 		// Get user's watch count
 		watchCount := 0
 		if userData, exists := info.UserWatchData[username]; exists {
 			watchCount = userData.WatchCount
 		}
-		
+
 		// Use IntValue for comparison if set (from parsed expression like watch_count_by:"user">3)
 		if f.IntValue > 0 || f.Operator != OpEquals {
 			return compareInt(watchCount, f.IntValue, f.Operator)
 		}
-		
+
 		// Default behavior: check if user has watched at all
 		return watchCount > 0
 	}
-	
+
 	return false
 }
 
@@ -173,7 +173,7 @@ func ParseAndCreateFilter(expression string) (func(radarr.MovieInfo) bool, error
 		// Empty filter matches everything
 		return func(radarr.MovieInfo) bool { return true }, nil
 	}
-	
+
 	// Check if it's a legacy filter and convert it
 	if IsLegacyFilter(expression) {
 		convertedExpr, err := ConvertLegacyFilter(expression)
@@ -182,7 +182,7 @@ func ParseAndCreateFilter(expression string) (func(radarr.MovieInfo) bool, error
 		}
 		expression = convertedExpr
 	}
-	
+
 	// Use expr to compile and create the filter
 	return CreateExprFilter(expression)
 }

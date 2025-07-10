@@ -77,7 +77,7 @@ func (c *Client) TestConnection() error {
 			c.logger.Error().Str("result", fmt.Sprintf("%v", res)).Msg("Unexpected result value")
 		}
 		if msg, ok := response["message"]; ok {
-			return fmt.Errorf("Tautulli error: %v", msg)
+			return fmt.Errorf("tautulli error: %v", msg)
 		}
 	}
 

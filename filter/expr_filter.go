@@ -7,6 +7,7 @@ import (
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
+
 	"github.com/s0up4200/arrbiter/radarr"
 )
 
@@ -21,7 +22,7 @@ func CompileExprFilter(expression string) (*ExprFilter, error) {
 	if strings.TrimSpace(expression) == "" {
 		return nil, fmt.Errorf("empty filter expression")
 	}
-	
+
 	// Define static helper functions that can be used in expressions
 	env := map[string]interface{}{
 		// Date helpers
@@ -56,16 +57,16 @@ func CompileExprFilter(expression string) (*ExprFilter, error) {
 		// Current time
 		"now": time.Now,
 	}
-	
+
 	// Compile the expression
-	program, err := expr.Compile(expression, 
+	program, err := expr.Compile(expression,
 		expr.Env(env),
 		expr.AllowUndefinedVariables(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile filter expression: %w", err)
 	}
-	
+
 	return &ExprFilter{
 		program: program,
 		expr:    expression,
@@ -78,7 +79,7 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 	env := map[string]interface{}{
 		// Movie data
 		"Movie": movie,
-		
+
 		// Tag helpers
 		"hasTag": func(tag string) bool {
 			for _, t := range movie.TagNames {
@@ -88,7 +89,7 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 			}
 			return false
 		},
-		
+
 		// User watch helpers
 		"watchedBy": func(username string) bool {
 			if userData, exists := movie.UserWatchData[username]; exists {
@@ -96,21 +97,21 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 			}
 			return false
 		},
-		
+
 		"watchCountBy": func(username string) int {
 			if userData, exists := movie.UserWatchData[username]; exists {
 				return userData.WatchCount
 			}
 			return 0
 		},
-		
+
 		"watchProgressBy": func(username string) float64 {
 			if userData, exists := movie.UserWatchData[username]; exists {
 				return userData.MaxProgress
 			}
 			return 0
 		},
-		
+
 		// Date helpers
 		"daysSince": func(t time.Time) int {
 			return int(time.Since(t).Hours() / 24)
@@ -128,7 +129,7 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 			t, _ := time.Parse("2006-01-02", dateStr)
 			return t
 		},
-		
+
 		// String helpers
 		"contains": func(str, substr string) bool {
 			return strings.Contains(strings.ToLower(str), strings.ToLower(substr))
@@ -141,10 +142,10 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 		},
 		"lower": strings.ToLower,
 		"upper": strings.ToUpper,
-		
+
 		// Current time
 		"now": time.Now,
-		
+
 		// Rating helpers
 		"imdbRating": func() float64 {
 			if val, ok := movie.Ratings["imdb"]; ok {
@@ -180,7 +181,7 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 			}
 			return 0
 		},
-		
+
 		// Request helpers (Overseerr integration)
 		"requestedBy": func(username string) bool {
 			return movie.IsRequested && strings.EqualFold(movie.RequestedBy, username)
@@ -225,7 +226,7 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 			}
 			return false // Not watched if no watch data
 		},
-		
+
 		// Direct movie properties for convenience
 		"Title":         movie.Title,
 		"Year":          movie.Year,
@@ -251,18 +252,18 @@ func (f *ExprFilter) Evaluate(movie radarr.MovieInfo) bool {
 		"IsAutoRequest":    movie.IsAutoRequest,
 		"IsRequested":      movie.IsRequested,
 	}
-	
+
 	result, err := expr.Run(f.program, env)
 	if err != nil {
 		// Log error but return false to skip the movie
 		return false
 	}
-	
+
 	// Convert result to boolean
 	if boolResult, ok := result.(bool); ok {
 		return boolResult
 	}
-	
+
 	return false
 }
 
@@ -277,7 +278,7 @@ func CreateExprFilter(expression string) (func(radarr.MovieInfo) bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return func(movie radarr.MovieInfo) bool {
 		return filter.Evaluate(movie)
 	}, nil

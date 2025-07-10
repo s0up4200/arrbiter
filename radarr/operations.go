@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
+	"golift.io/starr/radarr"
+
 	"github.com/s0up4200/arrbiter/overseerr"
 	"github.com/s0up4200/arrbiter/qbittorrent"
 	"github.com/s0up4200/arrbiter/tautulli"
-	"golift.io/starr/radarr"
 )
 
 // SearchOptions contains options for searching movies
@@ -67,13 +68,13 @@ func (o *Operations) GetAllMovies(ctx context.Context) ([]MovieInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Get all tags for mapping
 	tags, err := o.client.GetTags(ctx)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert to MovieInfo with tags
 	var results []MovieInfo
 	for _, movie := range movies {
@@ -83,7 +84,7 @@ func (o *Operations) GetAllMovies(ctx context.Context) ([]MovieInfo, error) {
 			results = append(results, info)
 		}
 	}
-	
+
 	// Enrich with watch status if Tautulli is configured
 	if o.tautulliClient != nil {
 		o.logger.Debug().Msg("Fetching watch status from Tautulli")
@@ -91,7 +92,7 @@ func (o *Operations) GetAllMovies(ctx context.Context) ([]MovieInfo, error) {
 			o.logger.Warn().Err(err).Msg("Failed to fetch watch status from Tautulli")
 		}
 	}
-	
+
 	// Enrich with request data if Overseerr is configured
 	if o.overseerrClient != nil {
 		o.logger.Debug().Msg("Fetching request data from Overseerr")
@@ -99,7 +100,7 @@ func (o *Operations) GetAllMovies(ctx context.Context) ([]MovieInfo, error) {
 			o.logger.Warn().Err(err).Msg("Failed to fetch request data from Overseerr")
 		}
 	}
-	
+
 	return results, nil
 }
 
@@ -110,20 +111,20 @@ func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Get all tags for mapping
 	tags, err := o.client.GetTags(ctx)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert movies to MovieInfo
 	var movieInfos []MovieInfo
 	for _, movie := range movies {
 		info := o.client.GetMovieInfo(movie, tags)
 		movieInfos = append(movieInfos, info)
 	}
-	
+
 	// Fetch watch status if Tautulli is configured
 	if o.tautulliClient != nil {
 		o.logger.Debug().Msg("Fetching watch status from Tautulli")
@@ -132,7 +133,7 @@ func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo
 			// Continue without watch status
 		}
 	}
-	
+
 	// Fetch request data if Overseerr is configured
 	if o.overseerrClient != nil {
 		o.logger.Debug().Msg("Fetching request data from Overseerr")
@@ -141,7 +142,7 @@ func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo
 			// Continue without request data
 		}
 	}
-	
+
 	// Filter movies - only consider movies with imported files
 	var results []MovieInfo
 	for _, info := range movieInfos {
@@ -153,12 +154,12 @@ func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo
 			results = append(results, info)
 		}
 	}
-	
+
 	// Sort by title
 	sort.Slice(results, func(i, j int) bool {
 		return strings.ToLower(results[i].Title) < strings.ToLower(results[j].Title)
 	})
-	
+
 	o.logger.Info().Msgf("Found %d movies matching filter", len(results))
 	return results, nil
 }
@@ -174,13 +175,13 @@ func (o *Operations) enrichWithWatchStatus(ctx context.Context, movies []MovieIn
 			Title:  movie.Title,
 		})
 	}
-	
+
 	// Get watch status with per-user data for all movies at once
 	watchStatuses, err := o.tautulliClient.BatchGetMovieWatchStatusWithUsers(ctx, identifiers, o.minWatchPercent)
 	if err != nil {
 		return err
 	}
-	
+
 	// Update movie info with watch status
 	for i := range movies {
 		if status, ok := watchStatuses[movies[i].IMDBID]; ok {
@@ -188,12 +189,12 @@ func (o *Operations) enrichWithWatchStatus(ctx context.Context, movies []MovieIn
 			movies[i].WatchCount = status.WatchCount
 			movies[i].LastWatched = status.LastWatched
 			movies[i].WatchProgress = status.MaxProgress
-			
+
 			// Initialize map if nil
 			if movies[i].UserWatchData == nil {
 				movies[i].UserWatchData = make(map[string]*UserWatchInfo)
 			}
-			
+
 			// Copy per-user data
 			for username, userData := range status.UserData {
 				movies[i].UserWatchData[username] = &UserWatchInfo{
@@ -206,7 +207,7 @@ func (o *Operations) enrichWithWatchStatus(ctx context.Context, movies []MovieIn
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -217,14 +218,14 @@ func (o *Operations) enrichWithRequestData(ctx context.Context, movies []MovieIn
 	if err != nil {
 		return fmt.Errorf("failed to fetch movie requests: %w", err)
 	}
-	
+
 	// Create a map of TMDB ID to requests for efficient lookup
 	requestsByTMDB := make(map[int64][]overseerr.MediaRequest)
 	for _, req := range requests {
 		tmdbID := int64(req.Media.TmdbID)
 		requestsByTMDB[tmdbID] = append(requestsByTMDB[tmdbID], req)
 	}
-	
+
 	// Update movie info with request data
 	for i := range movies {
 		if requests, ok := requestsByTMDB[movies[i].TMDBID]; ok && len(requests) > 0 {
@@ -235,7 +236,7 @@ func (o *Operations) enrichWithRequestData(ctx context.Context, movies []MovieIn
 					latestRequest = req
 				}
 			}
-			
+
 			// Convert and assign request data
 			requestData := overseerr.ConvertToMovieRequest(latestRequest)
 			movies[i].RequestedBy = requestData.RequestedBy
@@ -247,12 +248,12 @@ func (o *Operations) enrichWithRequestData(ctx context.Context, movies []MovieIn
 			movies[i].IsRequested = true
 		}
 	}
-	
+
 	o.logger.Debug().
 		Int("total_requests", len(requests)).
 		Int("matched_movies", len(requestsByTMDB)).
 		Msg("Enriched movies with Overseerr request data")
-	
+
 	return nil
 }
 
@@ -262,13 +263,13 @@ func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts 
 		o.logger.Info().Msg("No movies to delete")
 		return nil
 	}
-	
+
 	if opts.DryRun {
 		o.logger.Info().Msg("DRY RUN MODE - No movies will be deleted")
 		o.printMoviesToDelete(movies)
 		return nil
 	}
-	
+
 	if opts.ConfirmDelete {
 		o.printMoviesToDelete(movies)
 		if !o.confirmDeletion(len(movies)) {
@@ -276,18 +277,18 @@ func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts 
 			return nil
 		}
 	}
-	
+
 	// Delete movies
 	var deletedCount int
 	var errors []error
-	
+
 	for _, movie := range movies {
 		o.logger.Info().
 			Int64("id", movie.ID).
 			Str("title", movie.Title).
 			Int("year", movie.Year).
 			Msg("Deleting movie")
-		
+
 		if err := o.client.DeleteMovie(ctx, movie.ID, opts.DeleteFiles); err != nil {
 			o.logger.Error().Err(err).
 				Int64("id", movie.ID).
@@ -298,16 +299,16 @@ func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts 
 			deletedCount++
 		}
 	}
-	
+
 	o.logger.Info().
 		Int("deleted", deletedCount).
 		Int("failed", len(errors)).
 		Msg("Deletion complete")
-	
+
 	if len(errors) > 0 {
 		return fmt.Errorf("failed to delete %d movies", len(errors))
 	}
-	
+
 	return nil
 }
 
@@ -318,7 +319,7 @@ func (o *Operations) printMoviesToDelete(movies []MovieInfo) {
 		fmt.Printf("s")
 	}
 	fmt.Printf(" to be deleted (%d):\n\n", len(movies))
-	
+
 	var watchedCount int
 	for i, movie := range movies {
 		isLast := i == len(movies)-1
@@ -326,32 +327,32 @@ func (o *Operations) printMoviesToDelete(movies []MovieInfo) {
 		if isLast {
 			prefix = "\u2570"
 		}
-		
+
 		fmt.Printf("%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
-		
+
 		// Track watch status for warning
 		if movie.Watched {
 			watchedCount++
 		}
-		
+
 		indent := "\u2502   "
 		if isLast {
 			indent = "    "
 		}
-		
+
 		if len(movie.TagNames) > 0 {
 			fmt.Printf("%sTags: %s\n", indent, strings.Join(movie.TagNames, ", "))
 		}
 		if movie.HasFile {
 			fmt.Printf("%sFile: %s\n", indent, movie.Path)
 		}
-		
+
 		dateInfo := fmt.Sprintf("Added: %s", movie.Added.Format("2006-01-02"))
 		if !movie.FileImported.IsZero() {
 			dateInfo += fmt.Sprintf(" | Imported: %s", movie.FileImported.Format("2006-01-02"))
 		}
 		fmt.Printf("%s%s\n", indent, dateInfo)
-		
+
 		if movie.WatchCount > 0 {
 			watchInfo := fmt.Sprintf("Watched %dx", movie.WatchCount)
 			if !movie.LastWatched.IsZero() {
@@ -359,7 +360,7 @@ func (o *Operations) printMoviesToDelete(movies []MovieInfo) {
 			}
 			fmt.Printf("%s%s\n", indent, watchInfo)
 		}
-		
+
 		if movie.IsRequested {
 			requestInfo := fmt.Sprintf("Requested by: %s", movie.RequestedBy)
 			if !movie.RequestDate.IsZero() {
@@ -370,13 +371,13 @@ func (o *Operations) printMoviesToDelete(movies []MovieInfo) {
 			}
 			fmt.Printf("%s%s\n", indent, requestInfo)
 		}
-		
+
 		if i < len(movies)-1 {
 			fmt.Printf("\u2502\n")
 		}
 	}
 	fmt.Println()
-	
+
 	if watchedCount > 0 {
 		fmt.Printf("\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(movies))
 		fmt.Println("Use --ignore-watched flag to bypass this warning.")
@@ -386,10 +387,10 @@ func (o *Operations) printMoviesToDelete(movies []MovieInfo) {
 // confirmDeletion prompts the user for confirmation
 func (o *Operations) confirmDeletion(count int) bool {
 	fmt.Printf("\nAre you sure you want to delete %d movie(s)? [y/N]: ", count)
-	
+
 	var response string
 	fmt.Scanln(&response)
-	
+
 	return strings.ToLower(strings.TrimSpace(response)) == "y"
 }
 
@@ -408,24 +409,24 @@ func (o *Operations) ScanForImports(ctx context.Context, opts ImportOptions) ([]
 		Folder:              opts.Path,
 		FilterExistingFiles: true,
 	}
-	
+
 	// If specific movie ID provided, filter to that movie
 	if opts.MovieID > 0 {
 		params.MovieID = opts.MovieID
 	}
-	
+
 	o.logger.Info().Str("path", opts.Path).Msg("Scanning folder for importable movies")
-	
+
 	output, err := o.client.GetManualImportItems(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan for imports: %w", err)
 	}
-	
-	if output == nil || len(output) == 0 {
+
+	if len(output) == 0 {
 		o.logger.Info().Msg("No importable files found")
 		return nil, nil
 	}
-	
+
 	o.logger.Info().Msgf("Found %d importable files", len(output))
 	return output, nil
 }
@@ -436,14 +437,14 @@ func (o *Operations) ImportMovies(ctx context.Context, items []*radarr.ManualImp
 		o.logger.Info().Msg("No items to import")
 		return nil
 	}
-	
+
 	o.logger.Info().Msgf("Importing %d files", len(items))
-	
+
 	// Process imports
 	if err := o.client.ProcessManualImport(ctx, items); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
-	
+
 	o.logger.Info().Msg("Import completed successfully")
 	return nil
 }
@@ -451,18 +452,18 @@ func (o *Operations) ImportMovies(ctx context.Context, items []*radarr.ManualImp
 // ConvertToImportInput converts ManualImportOutput items to ManualImportInput for processing
 func (o *Operations) ConvertToImportInput(outputs []*radarr.ManualImportOutput, importMode string) []*radarr.ManualImportInput {
 	var inputs []*radarr.ManualImportInput
-	
+
 	for _, output := range outputs {
 		// Skip items with rejections
 		if len(output.Rejections) > 0 {
 			continue
 		}
-		
+
 		// Skip if no movie is associated
 		if output.Movie == nil {
 			continue
 		}
-		
+
 		input := &radarr.ManualImportInput{
 			ID:                output.ID,
 			Path:              output.Path,
@@ -475,10 +476,10 @@ func (o *Operations) ConvertToImportInput(outputs []*radarr.ManualImportOutput, 
 			CustomFormats:     convertCustomFormats(output.CustomFormats),
 			CustomFormatScore: output.CustomFormatScore,
 		}
-		
+
 		inputs = append(inputs, input)
 	}
-	
+
 	return inputs
 }
 
@@ -487,7 +488,7 @@ func convertCustomFormats(outputs []*radarr.CustomFormatOutput) []*radarr.Custom
 	if outputs == nil {
 		return nil
 	}
-	
+
 	var inputs []*radarr.CustomFormatInput
 	for _, output := range outputs {
 		input := &radarr.CustomFormatInput{
@@ -507,44 +508,44 @@ func (o *Operations) PrintImportableItems(items []*radarr.ManualImportOutput) {
 	}
 	fmt.Println(":")
 	fmt.Println()
-	
+
 	for i, item := range items {
 		isLast := i == len(items)-1
 		prefix := "\u251c"
 		if isLast {
 			prefix = "\u2570"
 		}
-		
+
 		movieTitle := "Unknown Movie"
 		if item.Movie != nil {
 			movieTitle = fmt.Sprintf("%s (%d)", item.Movie.Title, item.Movie.Year)
 		}
-		
+
 		fmt.Printf("%s\u2500\u2500 %s\n", prefix, item.Path)
-		
+
 		indent := "\u2502   "
 		if isLast {
 			indent = "    "
 		}
-		
+
 		fmt.Printf("%sMovie: %s\n", indent, movieTitle)
-		
+
 		if item.Quality != nil && item.Quality.Quality != nil {
 			fmt.Printf("%sQuality: %s\n", indent, item.Quality.Quality.Name)
 		}
-		
+
 		if item.Size > 0 {
 			sizeMB := float64(item.Size) / 1024 / 1024
 			fmt.Printf("%sSize: %.2f MB\n", indent, sizeMB)
 		}
-		
+
 		if len(item.Rejections) > 0 {
 			fmt.Printf("%sRejections:\n", indent)
 			for _, rejection := range item.Rejections {
 				fmt.Printf("%s  - %s\n", indent, rejection.Reason)
 			}
 		}
-		
+
 		if i < len(items)-1 {
 			fmt.Printf("\u2502\n")
 		}

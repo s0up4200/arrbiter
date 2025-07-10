@@ -25,56 +25,56 @@ const (
 
 // User represents an Overseerr user
 type User struct {
-	ID          int    `json:"id"`
-	Email       string `json:"email"`
-	Username    string `json:"username,omitempty"`
+	ID           int    `json:"id"`
+	Email        string `json:"email"`
+	Username     string `json:"username,omitempty"`
 	PlexUsername string `json:"plexUsername,omitempty"`
-	DisplayName string `json:"displayName"`
-	Avatar      string `json:"avatar,omitempty"`
+	DisplayName  string `json:"displayName"`
+	Avatar       string `json:"avatar,omitempty"`
 }
 
 // Media represents media information in Overseerr
 type Media struct {
-	ID              int       `json:"id"`
-	TmdbID          int       `json:"tmdbId"`
-	TvdbID          int       `json:"tvdbId,omitempty"`
-	ImdbID          string    `json:"imdbId,omitempty"`
-	Status          int       `json:"status"`
-	Status4k        int       `json:"status4k"`
-	MediaType       MediaType `json:"mediaType"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
-	LastSeasonChange time.Time `json:"lastSeasonChange,omitempty"`
-	MediaAddedAt    time.Time `json:"mediaAddedAt,omitempty"`
-	ServiceID       *int      `json:"serviceId,omitempty"`
-	ServiceID4k     *int      `json:"serviceId4k,omitempty"`
-	ExternalServiceID *int    `json:"externalServiceId,omitempty"`
-	ExternalServiceID4k *int `json:"externalServiceId4k,omitempty"`
-	ExternalServiceSlug string `json:"externalServiceSlug,omitempty"`
-	ExternalServiceSlug4k string `json:"externalServiceSlug4k,omitempty"`
-	RatingKey       string    `json:"ratingKey,omitempty"`
-	RatingKey4k     string    `json:"ratingKey4k,omitempty"`
+	ID                    int       `json:"id"`
+	TmdbID                int       `json:"tmdbId"`
+	TvdbID                int       `json:"tvdbId,omitempty"`
+	ImdbID                string    `json:"imdbId,omitempty"`
+	Status                int       `json:"status"`
+	Status4k              int       `json:"status4k"`
+	MediaType             MediaType `json:"mediaType"`
+	CreatedAt             time.Time `json:"createdAt"`
+	UpdatedAt             time.Time `json:"updatedAt"`
+	LastSeasonChange      time.Time `json:"lastSeasonChange,omitempty"`
+	MediaAddedAt          time.Time `json:"mediaAddedAt,omitempty"`
+	ServiceID             *int      `json:"serviceId,omitempty"`
+	ServiceID4k           *int      `json:"serviceId4k,omitempty"`
+	ExternalServiceID     *int      `json:"externalServiceId,omitempty"`
+	ExternalServiceID4k   *int      `json:"externalServiceId4k,omitempty"`
+	ExternalServiceSlug   string    `json:"externalServiceSlug,omitempty"`
+	ExternalServiceSlug4k string    `json:"externalServiceSlug4k,omitempty"`
+	RatingKey             string    `json:"ratingKey,omitempty"`
+	RatingKey4k           string    `json:"ratingKey4k,omitempty"`
 }
 
 // MediaRequest represents a media request in Overseerr
 type MediaRequest struct {
-	ID          int           `json:"id"`
-	Status      RequestStatus `json:"status"`
-	CreatedAt   time.Time     `json:"createdAt"`
-	UpdatedAt   time.Time     `json:"updatedAt"`
-	Type        MediaType     `json:"type"`
-	Is4k        bool          `json:"is4k"`
-	ServerID    *int          `json:"serverId,omitempty"`
-	ProfileID   *int          `json:"profileId,omitempty"`
-	RootFolder  *string       `json:"rootFolder,omitempty"`
-	LanguageProfileID *int    `json:"languageProfileId,omitempty"`
-	Tags        []int         `json:"tags,omitempty"`
-	IsAutoRequest bool        `json:"isAutoRequest"`
-	RequestedBy User          `json:"requestedBy"`
-	ModifiedBy  *User         `json:"modifiedBy,omitempty"`
-	Media       Media         `json:"media"`
-	SeasonCount int           `json:"seasonCount,omitempty"`
-	Seasons     []Season      `json:"seasons,omitempty"`
+	ID                int           `json:"id"`
+	Status            RequestStatus `json:"status"`
+	CreatedAt         time.Time     `json:"createdAt"`
+	UpdatedAt         time.Time     `json:"updatedAt"`
+	Type              MediaType     `json:"type"`
+	Is4k              bool          `json:"is4k"`
+	ServerID          *int          `json:"serverId,omitempty"`
+	ProfileID         *int          `json:"profileId,omitempty"`
+	RootFolder        *string       `json:"rootFolder,omitempty"`
+	LanguageProfileID *int          `json:"languageProfileId,omitempty"`
+	Tags              []int         `json:"tags,omitempty"`
+	IsAutoRequest     bool          `json:"isAutoRequest"`
+	RequestedBy       User          `json:"requestedBy"`
+	ModifiedBy        *User         `json:"modifiedBy,omitempty"`
+	Media             Media         `json:"media"`
+	SeasonCount       int           `json:"seasonCount,omitempty"`
+	Seasons           []Season      `json:"seasons,omitempty"`
 }
 
 // Season represents a TV season request
@@ -94,10 +94,10 @@ type RequestsResponse struct {
 
 // PageInfo contains pagination information
 type PageInfo struct {
-	Pages       int `json:"pages"`
-	PageSize    int `json:"pageSize"`
-	Results     int `json:"results"`
-	Page        int `json:"page"`
+	Pages    int `json:"pages"`
+	PageSize int `json:"pageSize"`
+	Results  int `json:"results"`
+	Page     int `json:"page"`
 }
 
 // MovieRequest represents request data specific to our cleanup tool

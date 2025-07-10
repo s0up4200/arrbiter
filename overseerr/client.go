@@ -55,7 +55,7 @@ func NewClient(baseURL, apiKey string, logger zerolog.Logger) (*Client, error) {
 // doRequest performs an HTTP request with authentication
 func (c *Client) doRequest(ctx context.Context, method, endpoint string, params url.Values) ([]byte, error) {
 	url := fmt.Sprintf("%s/api/v1%s", c.baseURL, endpoint)
-	if params != nil && len(params) > 0 {
+	if len(params) > 0 {
 		url += "?" + params.Encode()
 	}
 

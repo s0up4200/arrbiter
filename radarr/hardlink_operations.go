@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"golift.io/starr/radarr"
+
 	"github.com/s0up4200/arrbiter/hardlink"
 	"github.com/s0up4200/arrbiter/qbittorrent"
-	"golift.io/starr/radarr"
 )
 
 // HardlinkOptions contains options for hardlink operations
@@ -46,7 +47,7 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 
 		// Convert to MovieInfo
 		info := o.client.GetMovieInfo(movie, tags)
-		
+
 		// Only process movies with imported files
 		if info.FileImported.IsZero() {
 			continue
@@ -111,7 +112,7 @@ func (o *Operations) ReimportMovieFromQBittorrent(ctx context.Context, movie Mov
 	// Use manual import to re-import the file
 	// This will create a hardlink between qBittorrent and Radarr
 	importPath := torrent.GetFullPath()
-	
+
 	o.logger.Info().
 		Str("movie", movie.Title).
 		Str("path", importPath).
@@ -180,7 +181,7 @@ func (o *Operations) DeleteAndResearchMovie(ctx context.Context, movie MovieInfo
 			return fmt.Errorf("failed to delete movie file: %w", err)
 		}
 		o.logger.Debug().Msg("Deleted movie file")
-		
+
 		// Now we need to re-add the movie to trigger a new search
 		// For now, we'll just log that a manual search is needed
 		o.logger.Info().Msg("Movie file deleted. Please trigger a manual search in Radarr")

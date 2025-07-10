@@ -61,6 +61,8 @@ func init() {
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(testCmd)
 	rootCmd.AddCommand(importCmd)
+	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(updateCmd)
 }
 
 // initializeApp initializes the configuration and clients
@@ -162,11 +164,11 @@ func setupLogger(cfg config.LoggingConfig) zerolog.Logger {
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List movies matching the filter criteria",
-	Long:  `List all movies in your Radarr library that match the specified filter criteria.`,
+	Use:     "list",
+	Short:   "List movies matching the filter criteria",
+	Long:    `List all movies in your Radarr library that match the specified filter criteria.`,
 	PreRunE: initializeApp,
-	RunE:  runList,
+	RunE:    runList,
 }
 
 func init() {
@@ -196,7 +198,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Process each filter
 	for filterName, filterExpr := range cfg.Filter {
 		logger.Debug().Str("filter", filterName).Str("expression", filterExpr).Msg("Processing filter")
-		
+
 		// Parse filter
 		filterFunc, err := filter.ParseAndCreateFilter(filterExpr)
 		if err != nil {
@@ -231,37 +233,37 @@ func runList(cmd *cobra.Command, args []string) error {
 		if len(movies) == 0 {
 			continue
 		}
-		
+
 		fmt.Printf("\u256d\u2500 Filter: %s (%d match", filterName, len(movies))
 		if len(movies) != 1 {
 			fmt.Printf("es")
 		}
 		fmt.Println(")")
-		
+
 		for i, movie := range movies {
 			isLast := i == len(movies)-1
 			prefix := "\u251c"
 			if isLast {
 				prefix = "\u2570"
 			}
-			
+
 			fmt.Printf("%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
 			if cfg.Safety.ShowDetails {
 				indent := "\u2502   "
 				if isLast {
 					indent = "    "
 				}
-				
+
 				if len(movie.TagNames) > 0 {
 					fmt.Printf("%sTags: %s\n", indent, strings.Join(movie.TagNames, ", "))
 				}
-				
+
 				dateInfo := fmt.Sprintf("Added: %s", movie.Added.Format("2006-01-02"))
 				if !movie.FileImported.IsZero() {
 					dateInfo += fmt.Sprintf(" | Imported: %s", movie.FileImported.Format("2006-01-02"))
 				}
 				fmt.Printf("%s%s\n", indent, dateInfo)
-				
+
 				if movie.WatchCount > 0 {
 					watchInfo := fmt.Sprintf("Watched %dx", movie.WatchCount)
 					if !movie.LastWatched.IsZero() {
@@ -282,11 +284,11 @@ func runList(cmd *cobra.Command, args []string) error {
 
 // deleteCmd represents the delete command
 var deleteCmd = &cobra.Command{
-	Use:   "delete",
-	Short: "Delete movies matching the filter criteria",
-	Long:  `Delete movies from your Radarr library that match the specified filter criteria.`,
+	Use:     "delete",
+	Short:   "Delete movies matching the filter criteria",
+	Long:    `Delete movies from your Radarr library that match the specified filter criteria.`,
 	PreRunE: initializeApp,
-	RunE:  runDelete,
+	RunE:    runDelete,
 }
 
 func init() {
@@ -314,11 +316,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	// Track which movies match which filters
 	moviesByFilter := make(map[string][]radarr.MovieInfo)
 	uniqueMovies := make(map[int64]radarr.MovieInfo) // Track unique movies by ID
-	
+
 	// Process each filter
 	for filterName, filterExpr := range cfg.Filter {
 		logger.Debug().Str("filter", filterName).Str("expression", filterExpr).Msg("Processing filter")
-		
+
 		// Parse filter
 		filterFunc, err := filter.ParseAndCreateFilter(filterExpr)
 		if err != nil {
@@ -353,18 +355,18 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println(" to delete")
 	fmt.Println()
-	
+
 	for filterName, movies := range moviesByFilter {
 		if len(movies) == 0 {
 			continue
 		}
-		
+
 		fmt.Printf("\u256d\u2500 Filter: %s (%d match", filterName, len(movies))
 		if len(movies) != 1 {
 			fmt.Printf("es")
 		}
 		fmt.Println(")")
-		
+
 		for i, movie := range movies {
 			isLast := i == len(movies)-1
 			prefix := "\u251c"
@@ -408,11 +410,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 // testCmd represents the test command
 var testCmd = &cobra.Command{
-	Use:   "test",
-	Short: "Test connection to Radarr",
-	Long:  `Test the connection to your Radarr instance and display basic information.`,
+	Use:     "test",
+	Short:   "Test connection to Radarr",
+	Long:    `Test the connection to your Radarr instance and display basic information.`,
 	PreRunE: initializeApp,
-	RunE:  runTest,
+	RunE:    runTest,
 }
 
 func runTest(cmd *cobra.Command, args []string) error {
@@ -427,7 +429,7 @@ func runTest(cmd *cobra.Command, args []string) error {
 	} else {
 		logger.Info().Msg("Tautulli integration: Not configured")
 	}
-	
+
 	// Test Overseerr if configured
 	if overseerrClient != nil {
 		logger.Info().Str("url", cfg.Overseerr.URL).Msg("Testing Overseerr connection")
@@ -453,13 +455,12 @@ func runTest(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-
 // Import command variables
 var (
-	importPath   string
+	importPath    string
 	importMovieID int64
-	importMode   string
-	autoApprove  bool
+	importMode    string
+	autoApprove   bool
 )
 
 // importCmd represents the import command
@@ -476,7 +477,7 @@ Import modes:
 
 Use 'copy' mode when importing from qBittorrent to maintain seeding while saving disk space.`,
 	PreRunE: initializeApp,
-	RunE: runImport,
+	RunE:    runImport,
 }
 
 func init() {
@@ -484,40 +485,40 @@ func init() {
 	importCmd.Flags().Int64Var(&importMovieID, "movie-id", 0, "import files for a specific movie ID only")
 	importCmd.Flags().StringVar(&importMode, "mode", "copy", "import mode: 'move' (removes source) or 'copy' (hardlinks/copies)")
 	importCmd.Flags().BoolVar(&autoApprove, "auto", false, "automatically import all valid files without confirmation")
-	
+
 	importCmd.MarkFlagRequired("path")
 }
 
 func runImport(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
-	
+
 	// Validate import mode
 	if importMode != "move" && importMode != "copy" {
 		return fmt.Errorf("invalid import mode: %s (must be 'move' or 'copy')", importMode)
 	}
-	
+
 	// Create import options
 	opts := radarr.ImportOptions{
 		Path:       importPath,
 		MovieID:    importMovieID,
 		ImportMode: importMode,
 	}
-	
+
 	// Scan for importable files
 	logger.Info().Str("path", importPath).Msg("Scanning for importable movies")
 	items, err := operations.ScanForImports(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("failed to scan for imports: %w", err)
 	}
-	
+
 	if len(items) == 0 {
 		fmt.Println("No importable files found.")
 		return nil
 	}
-	
+
 	// Display found items
 	operations.PrintImportableItems(items)
-	
+
 	// Check for items with rejections
 	var validItems []*starr_radarr.ManualImportOutput
 	var rejectedCount int
@@ -528,16 +529,16 @@ func runImport(cmd *cobra.Command, args []string) error {
 			validItems = append(validItems, item)
 		}
 	}
-	
+
 	if rejectedCount > 0 {
 		fmt.Printf("\n⚠️  %d file(s) cannot be imported due to rejections\n", rejectedCount)
 	}
-	
+
 	if len(validItems) == 0 {
 		fmt.Println("\nNo valid files to import.")
 		return nil
 	}
-	
+
 	// Confirm import
 	if !autoApprove && !dryRun {
 		fmt.Printf("\nImport %d file(s) using %s mode? [y/N]: ", len(validItems), importMode)
@@ -548,21 +549,20 @@ func runImport(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 	}
-	
+
 	if dryRun {
 		fmt.Printf("\n[DRY RUN] Would import %d file(s) using %s mode\n", len(validItems), importMode)
 		return nil
 	}
-	
+
 	// Convert to import input format
 	importInputs := operations.ConvertToImportInput(validItems, importMode)
-	
+
 	// Process imports
 	if err := operations.ImportMovies(ctx, importInputs, opts); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
-	
+
 	fmt.Printf("\n✓ Successfully imported %d file(s)\n", len(importInputs))
 	return nil
 }
-
