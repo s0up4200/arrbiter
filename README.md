@@ -1,21 +1,71 @@
 # Arrbiter
 
+[![GitHub release](https://img.shields.io/github/release/s0up4200/arrbiter.svg)](https://github.com/s0up4200/arrbiter/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/s0up4200/arrbiter)](https://goreportcard.com/report/github.com/s0up4200/arrbiter)
+[![License](https://img.shields.io/github/license/s0up4200/arrbiter.svg)](LICENSE)
+
 > Your media library's arbiter of taste
 
-A CLI tool to manage and clean up Radarr movies based on advanced filter criteria, with optional Tautulli and Overseerr integration for watch status and request tracking.
+## The Problem
 
-## Features
+Your Radarr library keeps growing, but disk space doesn't. You've got:
+- **Movies requested but never watched** taking up precious storage
+- **Low-rated content** that nobody wants to see again  
+- **No easy way to clean up** without manually checking each movie
 
-- **Advanced Filtering**: Filter movies by tags, date added, date imported, and watch status
-- **Tautulli Integration**: Check if movies have been watched before deleting
-- **Overseerr Integration**: Filter based on who requested movies and when
-- **qBittorrent Integration**: Manage non-hardlinked movies and ensure proper hardlinking
-- **Manual Import**: Import movie files from folders with quality detection and validation
-- **Hardlink Management**: Detect and fix movies that aren't properly hardlinked
-- **Logical Operators**: Combine filters using AND, OR, and NOT operators
-- **Preset Filters**: Define reusable filter expressions in configuration
-- **Safety Features**: Dry-run mode, confirmation prompts, watched movie warnings
-- **Flexible Configuration**: YAML-based configuration with sensible defaults
+## The Solution
+
+Arrbiter is a smart CLI tool that automatically identifies and removes movies based on your criteria:
+- **Smart filtering** using ratings, watch history, and request data
+- **Integrates with your stack** (Radarr, Tautulli, Overseerr, qBittorrent)
+- **Safety first** with dry-run mode and confirmation prompts
+- **Powerful expressions** for complex cleanup rules
+
+> **Important**: This tool can permanently delete movies from your Radarr library and disk. Always test in dry-run mode first (which is the default)!
+
+## Quick Example
+
+```bash
+# Show what would be deleted (safe to run)
+arrbiter list
+
+# Show what would be deleted in dry-run mode (safe - default behavior)
+arrbiter delete
+
+# Force dry-run mode (always safe)
+arrbiter delete --dry-run
+
+# To actually delete, set dry_run: false in config.yaml, then:
+arrbiter delete
+```
+
+## Key Features
+
+- **Smart Cleanup**: Remove unwatched, low-rated, or old content automatically
+- **Request Tracking**: Clean up movies people requested but never watched
+- **Watch Analytics**: Integration with Tautulli for viewing history
+- **Hardlink Management**: Fix storage issues with qBittorrent integration
+- **Multiple Safety Nets**: Dry-run mode, confirmations, and detailed logging
+- **Highly Configurable**: Powerful filter expressions for any cleanup scenario
+
+## Prerequisites
+
+### Required
+- **Radarr** v3+ with API access
+- **Operating System**: Linux, macOS, FreeBSD, or Windows
+
+### Optional (for enhanced features)
+- **Tautulli**: For watch history tracking and user-specific filtering
+- **Overseerr/Jellyseerr**: For request tracking and accountability features  
+- **qBittorrent**: For hardlink management and storage optimization
+- **Same filesystem**: qBittorrent and Radarr must be on the same filesystem for hardlinks
+
+### Permissions Needed
+- Read access to Radarr API
+- Write access to Radarr (for deletions)
+- Network access to optional services (Tautulli, Overseerr, qBittorrent)
+
+> **Tip**: You can start with just Radarr and add other integrations later!
 
 ## Installation
 
@@ -67,43 +117,75 @@ cd arrbiter
 go build
 ```
 
-## Configuration
+## 5-Minute Quick Start
 
-1. Copy the example configuration:
-   ```bash
-   cp config.yaml.example config.yaml
-   ```
+### Step 1: Create Configuration
+Create a `config.yaml` file with your Radarr details:
 
-2. Edit `config.yaml` with your Radarr details and optional integrations:
-   ```yaml
-   radarr:
-     url: http://localhost:7878
-     api_key: your-api-key-here
-   
-   # Optional: Add Tautulli for watch tracking
-   tautulli:
-     url: http://localhost:8181
-     api_key: your-tautulli-api-key
-     min_watch_percent: 85  # Consider watched if >85% viewed
-     
-   # Optional: Add Overseerr for request tracking
-   overseerr:
-     url: http://localhost:5055
-     api_key: your-overseerr-api-key
-   
-   # Optional: Add qBittorrent for hardlink management
-   qbittorrent:
-     url: http://localhost:8080
-     username: admin
-     password: adminpass
-   ```
+```yaml
+radarr:
+  url: http://localhost:7878          # Your Radarr URL
+  api_key: your-radarr-api-key-here  # Get this from Radarr Settings > General
 
-The tool will look for `config.yaml` in:
-- Current directory
-- `~/.config/arrbiter/`
-- `~/.arrbiter/`
+# Define some basic cleanup filters
+filter:
+  # Remove old unwatched movies (safe starter filter)
+  old_unwatched: not Watched and Added < monthsAgo(6)
+  
+  # Remove low-rated movies that are old
+  low_rated_old: imdbRating() < 5.5 and Added < monthsAgo(3)
+```
 
-If no config file is found, a default one will be created at `~/.config/arrbiter/config.yaml`.
+> **Config Location**: The tool looks for `config.yaml` in the current directory, `~/.config/arrbiter/`, or `~/.arrbiter/`
+
+### Step 2: Test Your Setup
+```bash
+# Test connection to Radarr
+arrbiter test
+
+# See what movies match your filters (completely safe)
+arrbiter list
+```
+
+### Step 3: Run Your First Cleanup (Safely!)
+```bash
+# Shows what WOULD be deleted (safe - default behavior)
+arrbiter delete
+
+# To actually delete movies:
+# 1. First, edit your config.yaml and set:
+#    safety:
+#      dry_run: false
+# 2. Then run the same command:
+arrbiter delete
+```
+
+### Step 4: Configure for Actual Deletions (When Ready)
+To switch from dry-run mode to actual deletions, edit your `config.yaml`:
+
+```yaml
+# Change this setting to allow actual deletions
+safety:
+  dry_run: false          # Set to false to enable actual deletions
+  confirm_delete: true    # Keep confirmations for safety
+```
+
+### Step 5: Add More Integrations (Optional)
+Add these to your `config.yaml` for enhanced features:
+
+```yaml
+# Add Tautulli for watch tracking
+tautulli:
+  url: http://localhost:8181
+  api_key: your-tautulli-api-key
+
+# Add Overseerr for request tracking  
+overseerr:
+  url: http://localhost:5055
+  api_key: your-overseerr-api-key
+```
+
+> **You're ready!** Start with the basic filters above, then explore the [advanced examples](#advanced-filter-examples) below.
 
 ## Usage
 
@@ -129,11 +211,11 @@ Then run the tool:
 # List all movies matching ANY of your filters
 arrbiter list
 
-# Delete them (dry-run first to see what would be deleted)
+# Show what would be deleted (dry-run mode - default behavior)
 arrbiter delete
 
-# Actually delete them
-arrbiter delete --no-dry-run
+# To actually delete them, set dry_run: false in config.yaml first, then:
+arrbiter delete
 
 # Manually import movie files from a folder
 arrbiter import --path /path/to/movies
@@ -264,9 +346,50 @@ notWatchedByRequester()        # Movies where the requester hasn't watched them
 watchedByRequester()           # Movies where the requester has watched them
 ```
 
-### Practical Filter Examples
+## Basic Filter Examples
 
-#### Request Accountability
+*Start with these common cleanup scenarios:*
+
+```yaml
+filter:
+  # Remove old movies nobody has watched (safe starter)
+  old_unwatched: |
+    not Watched and 
+    Added < monthsAgo(4)
+
+  # Clean up low-rated content  
+  poor_quality: |
+    imdbRating() < 5.5 and 
+    Added < monthsAgo(2) and 
+    not hasTag("keep")
+
+  # Remove movies requested but never watched (requires Overseerr)
+  unwatched_requests: |
+    notWatchedByRequester() and 
+    Added < daysAgo(30)
+
+  # Free up space from large old files
+  space_saver: |
+    not Watched and 
+    Added < monthsAgo(6) and 
+    contains(Path, "2160p")
+
+  # Clean up movies watched once and forgotten
+  one_time_watches: |
+    WatchCount == 1 and 
+    daysSince(LastWatched) > 180
+```
+
+> **Pro Tip**: Always test with `arrbiter list` first to see what each filter matches!
+
+---
+
+## Advanced Filter Examples
+
+<details>
+<summary><strong>Click to expand advanced filtering scenarios</strong></summary>
+
+### Request Accountability
 *Ensure users watch what they request*
 
 ```yaml
@@ -430,6 +553,9 @@ aggressive_cleanup: |
 - Using `!notWatchedByRequester()` matches movies that either weren't requested OR were requested and watched
 - Using `!watchedByRequester()` matches movies that either weren't requested OR were requested but not watched
 
+</details>
+
+---
 
 ## Safety Features
 
@@ -601,6 +727,79 @@ This integration enables powerful filtering scenarios:
 - Protect movies that were specifically requested by certain users
 - Differentiate between requested content and manually added movies
 
+## FAQ
+
+<details>
+<summary><strong>Common Questions</strong></summary>
+
+**Q: Is it safe to use this tool?**  
+A: Yes! The tool has multiple safety features: dry-run mode is enabled by default, confirmation prompts, and detailed logging. Always test with `arrbiter list` first.
+
+**Q: Can I undo deletions?**  
+A: No, deletions are permanent. That's why dry-run mode is so important. Test your filters thoroughly before setting `dry_run: false` in your config.
+
+**Q: Do I need all the integrations (Tautulli, Overseerr, qBittorrent)?**  
+A: No! You only need Radarr. The other integrations add features but are completely optional.
+
+**Q: How do I find my Radarr API key?**  
+A: In Radarr, go to Settings > General > Security > API Key
+
+**Q: Can I run this on a schedule?**  
+A: Yes! Use `--no-confirm` flag and add it to cron/systemd. Always test your filters first.
+
+**Q: Why are my filters not matching anything?**  
+A: Check the [troubleshooting section](#-troubleshooting) below. Common issues are incorrect API keys or filter syntax.
+
+</details>
+
+---
+
+## Troubleshooting
+
+### Connection Issues
+
+**"Failed to connect to Radarr"**
+- Verify Radarr URL is correct and accessible
+- Check API key in Radarr Settings > General > Security
+- Ensure Radarr is running and responding
+
+**"No movies found"**
+- Check if Radarr has movies in the library
+- Verify API permissions (should have read access)
+
+### Filter Issues
+
+**"No movies match filters"**
+- Test individual filter components: `Added < monthsAgo(3)`
+- Check if properties exist: some movies may not have ratings
+- Use `arrbiter list` to debug what's being matched
+
+**"Syntax error in filter"**
+- Check parentheses are balanced
+- Verify function names are correct (case-sensitive)
+- Use proper YAML multi-line syntax with `|`
+
+### Integration Issues
+
+**Tautulli integration not working**
+- Verify API key and URL
+- Check that Tautulli has view history for your movies
+- Movies are matched by IMDB ID or title
+
+**Overseerr requests not found**
+- Ensure movies were actually requested through Overseerr
+- API key needs read access to requests
+- Only TMDB-matched movies will have request data
+
+### Performance Issues
+
+**Slow startup**
+- Normal for large libraries (>10k movies)
+- Tautulli integration adds processing time
+- Consider running with specific filters only
+
+---
+
 ## Development
 
 ### Dependencies
@@ -622,6 +821,16 @@ go build
 ```bash
 go test ./...
 ```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+---
 
 ## License
 
