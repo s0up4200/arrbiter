@@ -174,17 +174,29 @@ func (o *Operations) DeleteAndResearchMovie(ctx context.Context, movie MovieInfo
 
 	// First, delete just the file (not the movie entry)
 	if movie.MovieFile != nil && movie.MovieFile.ID > 0 {
-		// Delete the movie file using the movie ID and delete files flag
-		// This will delete the file but keep the movie entry
-		err := o.client.DeleteMovie(ctx, movie.ID, true)
+		// Delete only the movie file using its file ID
+		// This keeps the movie entry in Radarr but removes the file
+		err := o.client.DeleteMovieFiles(ctx, movie.MovieFile.ID)
 		if err != nil {
 			return fmt.Errorf("failed to delete movie file: %w", err)
 		}
-		o.logger.Debug().Msg("Deleted movie file")
+		o.logger.Debug().Int64("file_id", movie.MovieFile.ID).Msg("Deleted movie file")
 
-		// Now we need to re-add the movie to trigger a new search
-		// For now, we'll just log that a manual search is needed
-		o.logger.Info().Msg("Movie file deleted. Please trigger a manual search in Radarr")
+		// Trigger a search for a new version of the movie
+		searchCommand := &radarr.CommandRequest{
+			Name:     "MoviesSearch",
+			MovieIDs: []int64{movie.ID},
+		}
+
+		_, err = o.client.SendCommand(ctx, searchCommand)
+		if err != nil {
+			return fmt.Errorf("failed to trigger movie search: %w", err)
+		}
+
+		o.logger.Info().
+			Str("movie", movie.Title).
+			Int64("movie_id", movie.ID).
+			Msg("Successfully deleted movie file and triggered search")
 	}
 
 	return nil

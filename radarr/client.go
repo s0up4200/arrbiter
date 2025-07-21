@@ -66,6 +66,30 @@ func (c *Client) DeleteMovie(ctx context.Context, movieID int64, deleteFiles boo
 	return nil
 }
 
+// DeleteMovieFiles deletes movie files by their IDs (without deleting the movie entry)
+func (c *Client) DeleteMovieFiles(ctx context.Context, movieFileIDs ...int64) error {
+	err := c.client.DeleteMovieFilesContext(ctx, movieFileIDs...)
+	if err != nil {
+		return fmt.Errorf("failed to delete movie files %v: %w", movieFileIDs, err)
+	}
+
+	c.logger.Info().Interface("movie_file_ids", movieFileIDs).
+		Msg("Successfully deleted movie files")
+	return nil
+}
+
+// SendCommand sends a command to Radarr
+func (c *Client) SendCommand(ctx context.Context, cmd *radarr.CommandRequest) (*radarr.CommandResponse, error) {
+	response, err := c.client.SendCommandContext(ctx, cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send command %s: %w", cmd.Name, err)
+	}
+
+	c.logger.Info().Str("command", cmd.Name).Interface("movie_ids", cmd.MovieIDs).
+		Msg("Successfully sent command")
+	return response, nil
+}
+
 // GetTagByName finds a tag by its label
 func (c *Client) GetTagByName(ctx context.Context, tagName string) (*starr.Tag, error) {
 	tags, err := c.GetTags(ctx)
