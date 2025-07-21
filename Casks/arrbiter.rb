@@ -2,7 +2,7 @@
 cask "arrbiter" do
   desc "Your media library's arbiter of taste - A CLI tool for managing Radarr movies with advanced filtering"
   homepage "https://github.com/s0up4200/arrbiter"
-  version "0.1.0"
+  version "1.0.0"
 
   livecheck do
     skip "Auto-generated on release."
@@ -12,23 +12,23 @@ cask "arrbiter" do
 
   on_macos do
     on_intel do
-      url "https://github.com/s0up4200/arrbiter/releases/download/v0.1.0/arrbiter_0.1.0_Darwin_x86_64.tar.gz"
-      sha256 "5f7cc3b7f574c4d66f4bdf1a59ed9901df23fef6d8dfc12efe7bd6f076106dbf"
+      url "https://github.com/s0up4200/arrbiter/releases/download/v1.0.0/arrbiter_1.0.0_Darwin_x86_64.tar.gz"
+      sha256 "27035d70143c62503014b1ab6ca5aa990d9efcaf8d719570e9e4115fc8f2f92f"
     end
     on_arm do
-      url "https://github.com/s0up4200/arrbiter/releases/download/v0.1.0/arrbiter_0.1.0_Darwin_arm64.tar.gz"
-      sha256 "6744d41e5ed24404ada1fc9fc78ba33c8438c06a1df44a6f87146a5a8fe481ab"
+      url "https://github.com/s0up4200/arrbiter/releases/download/v1.0.0/arrbiter_1.0.0_Darwin_arm64.tar.gz"
+      sha256 "13b82c09db3fdf992a599f479ec860d73e71bf8c42334682158d872384edc81e"
     end
   end
 
   on_linux do
     on_intel do
-      url "https://github.com/s0up4200/arrbiter/releases/download/v0.1.0/arrbiter_0.1.0_Linux_x86_64.tar.gz"
-      sha256 "abbf9917227ae96f1c32858b94281a96768460935cb334d278d677c765d2f48b"
+      url "https://github.com/s0up4200/arrbiter/releases/download/v1.0.0/arrbiter_1.0.0_Linux_x86_64.tar.gz"
+      sha256 "82f1a9e363462e1a0220f068cbea49ccdc65fee7bd3c05e1b1151bd3847d5268"
     end
     on_arm do
-      url "https://github.com/s0up4200/arrbiter/releases/download/v0.1.0/arrbiter_0.1.0_Linux_arm64.tar.gz"
-      sha256 "a6adf8644ac31fc041dd320bc187117938ab3f88fe5e96a5e72ee1a02b17b46a"
+      url "https://github.com/s0up4200/arrbiter/releases/download/v1.0.0/arrbiter_1.0.0_Linux_arm64.tar.gz"
+      sha256 "9d81cac3a905cf7a458aef0f08db82907593c9fad7200dda90b4a1583db23e01"
     end
   end
 
