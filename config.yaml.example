@@ -44,3 +44,19 @@ safety:
 logging:
   level: info        # debug, info, warn, error
   color: true        # colorized console output
+
+upgrade:
+  # Custom formats to look for when upgrading movies
+  # Leave empty to disable upgrade filtering by custom format
+  custom_formats:
+    - "HD Bluray Tier 01"
+    - "HD Bluray Tier 02"
+    - "HD Bluray Tier 03"
+  
+  # Match mode for custom formats:
+  # - "all": Movie must have ALL specified custom formats
+  # - "any": Movie must have at least ONE of the specified custom formats
+  match_mode: all
+  
+  # Automatically monitor upgraded movies in Radarr
+  auto_monitor: true
