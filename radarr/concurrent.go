@@ -108,7 +108,10 @@ func (c *Client) BatchDeleteMovies(ctx context.Context, movies []MovieInfo, dele
 	}
 
 	// Wait for all operations to complete
-	g.Wait()
+	if err := g.Wait(); err != nil {
+		// Even if there's an error, we still want to collect the results
+		c.logger.Error().Err(err).Msg("Error during batch delete operations")
+	}
 	close(successChan)
 	close(errorChan)
 
@@ -182,11 +185,6 @@ func (c *Client) BatchSearchMovies(ctx context.Context, movieIDs []int64) error 
 	}
 
 	return g.Wait()
-}
-
-// ConcurrentEnrichment handles concurrent enrichment from multiple sources
-type ConcurrentEnrichment struct {
-	client *Client
 }
 
 // EnrichMoviesFromMultipleSources enriches movie data from multiple sources concurrently

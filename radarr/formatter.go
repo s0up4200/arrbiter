@@ -29,7 +29,7 @@ func (f *ConsoleFormatter) FormatMovieList(movies []MovieInfo, options FormatOpt
 	if len(movies) != 1 {
 		sb.WriteString("s")
 	}
-	sb.WriteString(fmt.Sprintf(" (%d):\n\n", len(movies)))
+	fmt.Fprintf(&sb, " (%d):\n\n", len(movies))
 
 	// Format each movie
 	for i, movie := range movies {
@@ -59,7 +59,7 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 	if len(movies) != 1 {
 		sb.WriteString("s")
 	}
-	sb.WriteString(fmt.Sprintf(" to be deleted (%d):\n\n", len(movies)))
+	fmt.Fprintf(&sb, " to be deleted (%d):\n\n", len(movies))
 
 	// Format each movie
 	for i, movie := range movies {
@@ -69,7 +69,7 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 			prefix = "\u2570"
 		}
 
-		sb.WriteString(fmt.Sprintf("%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year))
+		fmt.Fprintf(&sb, "%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
 
 		// Track watch status for warning
 		if movie.Watched {
@@ -83,12 +83,12 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 
 		// Tags
 		if len(movie.TagNames) > 0 {
-			sb.WriteString(fmt.Sprintf("%sTags: %s\n", indent, strings.Join(movie.TagNames, ", ")))
+			fmt.Fprintf(&sb, "%sTags: %s\n", indent, strings.Join(movie.TagNames, ", "))
 		}
 
 		// File path
 		if movie.HasFile {
-			sb.WriteString(fmt.Sprintf("%sFile: %s\n", indent, movie.Path))
+			fmt.Fprintf(&sb, "%sFile: %s\n", indent, movie.Path)
 		}
 
 		// Dates
@@ -96,7 +96,7 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 		if !movie.FileImported.IsZero() {
 			dateInfo += fmt.Sprintf(" | Imported: %s", movie.FileImported.Format("2006-01-02"))
 		}
-		sb.WriteString(fmt.Sprintf("%s%s\n", indent, dateInfo))
+		fmt.Fprintf(&sb, "%s%s\n", indent, dateInfo)
 
 		// Watch info
 		if movie.WatchCount > 0 {
@@ -104,7 +104,7 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 			if !movie.LastWatched.IsZero() {
 				watchInfo += fmt.Sprintf(" (last: %s)", movie.LastWatched.Format("2006-01-02"))
 			}
-			sb.WriteString(fmt.Sprintf("%s%s\n", indent, watchInfo))
+			fmt.Fprintf(&sb, "%s%s\n", indent, watchInfo)
 		}
 
 		// Request info
@@ -116,7 +116,7 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 			if movie.RequestStatus != "" {
 				requestInfo += fmt.Sprintf(" (Status: %s)", movie.RequestStatus)
 			}
-			sb.WriteString(fmt.Sprintf("%s%s\n", indent, requestInfo))
+			fmt.Fprintf(&sb, "%s%s\n", indent, requestInfo)
 		}
 
 		if !isLast {
@@ -128,7 +128,7 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 
 	// Warning for watched movies
 	if watchedCount > 0 {
-		sb.WriteString(fmt.Sprintf("\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(movies)))
+		fmt.Fprintf(&sb, "\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(movies))
 		sb.WriteString("Use --ignore-watched flag to bypass this warning.\n")
 	}
 
@@ -142,7 +142,7 @@ func (f *ConsoleFormatter) FormatUpgradeCandidates(candidates []UpgradeResult) s
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\nMovies that can be upgraded (%d):\n\n", len(candidates)))
+	fmt.Fprintf(&sb, "\nMovies that can be upgraded (%d):\n\n", len(candidates))
 
 	for i, candidate := range candidates {
 		isLast := i == len(candidates)-1
@@ -151,7 +151,7 @@ func (f *ConsoleFormatter) FormatUpgradeCandidates(candidates []UpgradeResult) s
 			prefix = "\u2570"
 		}
 
-		sb.WriteString(fmt.Sprintf("%s\u2500\u2500 %s (%d)\n", prefix, candidate.Movie.Title, candidate.Movie.Year))
+		fmt.Fprintf(&sb, "%s\u2500\u2500 %s (%d)\n", prefix, candidate.Movie.Title, candidate.Movie.Year)
 
 		indent := "\u2502   "
 		if isLast {
@@ -160,16 +160,16 @@ func (f *ConsoleFormatter) FormatUpgradeCandidates(candidates []UpgradeResult) s
 
 		// Current formats and score
 		if len(candidate.CurrentFormats) > 0 {
-			sb.WriteString(fmt.Sprintf("%sCurrent Formats: %v (Score: %d)\n", 
-				indent, candidate.CurrentFormats, candidate.CurrentFormatScore))
+			fmt.Fprintf(&sb, "%sCurrent Formats: %v (Score: %d)\n", 
+				indent, candidate.CurrentFormats, candidate.CurrentFormatScore)
 		} else {
-			sb.WriteString(fmt.Sprintf("%sCurrent Formats: None (Score: %d)\n", 
-				indent, candidate.CurrentFormatScore))
+			fmt.Fprintf(&sb, "%sCurrent Formats: None (Score: %d)\n", 
+				indent, candidate.CurrentFormatScore)
 		}
 
 		// Missing formats
 		if len(candidate.MissingFormats) > 0 {
-			sb.WriteString(fmt.Sprintf("%sMissing Formats: %v\n", indent, candidate.MissingFormats))
+			fmt.Fprintf(&sb, "%sMissing Formats: %v\n", indent, candidate.MissingFormats)
 		}
 
 		// Status info
@@ -181,12 +181,12 @@ func (f *ConsoleFormatter) FormatUpgradeCandidates(candidates []UpgradeResult) s
 			statusParts = append(statusParts, "Not Monitored")
 		}
 		if len(statusParts) > 0 {
-			sb.WriteString(fmt.Sprintf("%sStatus: %v\n", indent, statusParts))
+			fmt.Fprintf(&sb, "%sStatus: %v\n", indent, statusParts)
 		}
 
 		// File info
 		if candidate.Movie.MovieFile != nil && candidate.Movie.MovieFile.Path != "" {
-			sb.WriteString(fmt.Sprintf("%sFile: %s\n", indent, candidate.Movie.MovieFile.Path))
+			fmt.Fprintf(&sb, "%sFile: %s\n", indent, candidate.Movie.MovieFile.Path)
 		}
 
 		if !isLast {
@@ -251,7 +251,7 @@ func (f *ConsoleFormatter) formatMovie(sb *strings.Builder, movie MovieInfo, isL
 		prefix = "\u2570"
 	}
 
-	sb.WriteString(fmt.Sprintf("%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year))
+	fmt.Fprintf(sb, "%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
 
 	indent := "\u2502   "
 	if isLast {
@@ -260,13 +260,13 @@ func (f *ConsoleFormatter) formatMovie(sb *strings.Builder, movie MovieInfo, isL
 
 	// Basic info
 	if len(movie.TagNames) > 0 && options.ShowDetails {
-		sb.WriteString(fmt.Sprintf("%sTags: %s\n", indent, strings.Join(movie.TagNames, ", ")))
+		fmt.Fprintf(sb, "%sTags: %s\n", indent, strings.Join(movie.TagNames, ", "))
 	}
 
 	if movie.HasFile && options.ShowDetails {
-		sb.WriteString(fmt.Sprintf("%sFile: %s\n", indent, movie.Path))
+		fmt.Fprintf(sb, "%sFile: %s\n", indent, movie.Path)
 		if movie.IsHardlinked {
-			sb.WriteString(fmt.Sprintf("%sHardlinks: %d\n", indent, movie.HardlinkCount))
+			fmt.Fprintf(sb, "%sHardlinks: %d\n", indent, movie.HardlinkCount)
 		}
 	}
 
@@ -276,7 +276,7 @@ func (f *ConsoleFormatter) formatMovie(sb *strings.Builder, movie MovieInfo, isL
 		if !movie.LastWatched.IsZero() {
 			watchInfo += fmt.Sprintf(" (last: %s)", movie.LastWatched.Format("2006-01-02"))
 		}
-		sb.WriteString(fmt.Sprintf("%s%s\n", indent, watchInfo))
+		fmt.Fprintf(sb, "%s%s\n", indent, watchInfo)
 		
 		// Per-user watch data
 		if len(movie.UserWatchData) > 0 {
@@ -286,7 +286,7 @@ func (f *ConsoleFormatter) formatMovie(sb *strings.Builder, movie MovieInfo, isL
 					if userData.MaxProgress > 0 {
 						userInfo += fmt.Sprintf(" (%.0f%%)", userData.MaxProgress)
 					}
-					sb.WriteString(fmt.Sprintf("%s%s\n", indent, userInfo))
+					fmt.Fprintf(sb, "%s%s\n", indent, userInfo)
 				}
 			}
 		}
@@ -298,7 +298,7 @@ func (f *ConsoleFormatter) formatMovie(sb *strings.Builder, movie MovieInfo, isL
 		if !movie.RequestDate.IsZero() {
 			requestInfo += fmt.Sprintf(" on %s", movie.RequestDate.Format("2006-01-02"))
 		}
-		sb.WriteString(fmt.Sprintf("%s%s\n", indent, requestInfo))
+		fmt.Fprintf(sb, "%s%s\n", indent, requestInfo)
 	}
 
 	// Ratings
@@ -307,7 +307,7 @@ func (f *ConsoleFormatter) formatMovie(sb *strings.Builder, movie MovieInfo, isL
 		for source, rating := range movie.Ratings {
 			ratings = append(ratings, fmt.Sprintf("%s: %.1f", source, rating))
 		}
-		sb.WriteString(fmt.Sprintf("%sRatings: %s\n", indent, strings.Join(ratings, ", ")))
+		fmt.Fprintf(sb, "%sRatings: %s\n", indent, strings.Join(ratings, ", "))
 	}
 }
 
@@ -318,7 +318,7 @@ func (f *ConsoleFormatter) FormatHardlinkResults(movies []MovieInfo) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\nNon-hardlinked movies (%d):\n\n", len(movies)))
+	fmt.Fprintf(&sb, "\nNon-hardlinked movies (%d):\n\n", len(movies))
 
 	// Group by status
 	var inQBittorrent, notInQBittorrent []MovieInfo
@@ -340,7 +340,7 @@ func (f *ConsoleFormatter) FormatHardlinkResults(movies []MovieInfo) string {
 				prefix = "\u2570"
 			}
 			
-			sb.WriteString(fmt.Sprintf("%s\u2500\u2500 %s (%d)", prefix, movie.Title, movie.Year))
+			fmt.Fprintf(&sb, "%s\u2500\u2500 %s (%d)", prefix, movie.Title, movie.Year)
 			if movie.IsSeeding {
 				sb.WriteString(" [SEEDING]")
 			}
@@ -363,7 +363,7 @@ func (f *ConsoleFormatter) FormatHardlinkResults(movies []MovieInfo) string {
 				prefix = "\u2570"
 			}
 			
-			sb.WriteString(fmt.Sprintf("%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year))
+			fmt.Fprintf(&sb, "%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
 			
 			if !isLast {
 				sb.WriteString("\u2502\n")

@@ -204,7 +204,10 @@ func (o *Operations) confirmDeletion(count int) bool {
 	fmt.Printf("\nAre you sure you want to delete %d movie(s)? [y/N]: ", count)
 
 	var response string
-	fmt.Scanln(&response)
+	if _, err := fmt.Scanln(&response); err != nil {
+		// Handle empty input or error - default to safe option
+		response = "n"
+	}
 
 	return strings.ToLower(strings.TrimSpace(response)) == "y"
 }
@@ -266,9 +269,8 @@ func (o *Operations) ImportMovies(ctx context.Context, items []*radarr.ManualImp
 
 // PrintImportableItems prints importable items in a formatted way
 func (o *Operations) PrintImportableItems(items []*radarr.ManualImportOutput) {
-	if o.formatter != nil {
-		o.formatter.(*ConsoleFormatter).PrintImportableItems(items)
-	}
+	formatter := &ConsoleFormatter{}
+	formatter.PrintImportableItems(items)
 }
 
 // ConvertToImportInput converts ManualImportOutput items to ManualImportInput for processing

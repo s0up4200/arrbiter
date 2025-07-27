@@ -45,8 +45,6 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 	g.SetLimit(DefaultBatchSize)
 
 	for _, movie := range movies {
-		movie := movie // Capture loop variable
-
 		// Skip movies without files
 		if movie.MovieFile == nil || movie.MovieFile.Path == "" {
 			continue
@@ -97,7 +95,9 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 
 	// Wait for all goroutines to complete
 	go func() {
-		g.Wait()
+		if err := g.Wait(); err != nil {
+			o.logger.Error().Err(err).Msg("Error during hardlink checking")
+		}
 		close(results)
 	}()
 

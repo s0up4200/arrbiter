@@ -142,7 +142,8 @@ func (c *Client) getHistory(ctx context.Context, guid, search, mediaType, user s
 	}
 
 	requestURL := fmt.Sprintf("%s/api/v2?%s", c.baseURL, params.Encode())
-	c.logger.Debug().Str("url", requestURL).Msg("Making Tautulli API request")
+	c.logger.Debug().
+		Msg("Making Tautulli API request")
 
 	req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
 	if err != nil {

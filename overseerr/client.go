@@ -67,10 +67,9 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, params 
 	req.Header.Set("X-Api-Key", c.apiKey)
 	req.Header.Set("Accept", "application/json")
 
-	//c.logger.Debug().
-	//	Str("method", method).
-	//	Str("url", url).
-	//	Msg("Making Overseerr API request")
+	c.logger.Debug().
+		Str("method", method).
+		Msg("Making Overseerr API request")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
