@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"golang.org/x/sync/errgroup"
 	"golift.io/starr/radarr"
 
 	"github.com/s0up4200/arrbiter/hardlink"
@@ -38,52 +39,72 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 	var nonHardlinkedMovies []MovieInfo
 	var processedCount int
 
-	// Check hardlink status for each movie
+	// Process movies concurrently for hardlink checking
+	results := make(chan MovieInfo, len(movies))
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(DefaultBatchSize)
+
 	for _, movie := range movies {
+		movie := movie // Capture loop variable
+
 		// Skip movies without files
 		if movie.MovieFile == nil || movie.MovieFile.Path == "" {
 			continue
 		}
 
-		// Convert to MovieInfo
-		info := o.client.GetMovieInfo(movie, tags)
+		g.Go(func() error {
+			// Convert to MovieInfo
+			info := o.client.GetMovieInfo(movie, tags)
 
-		// Only process movies with imported files
-		if info.FileImported.IsZero() {
-			continue
-		}
-
-		processedCount++
-
-		// Check hardlink count
-		count, err := hardlink.GetHardlinkCount(movie.MovieFile.Path)
-		if err != nil {
-			o.logger.Warn().
-				Err(err).
-				Str("movie", info.Title).
-				Str("path", movie.MovieFile.Path).
-				Msg("Failed to check hardlink status")
-			continue
-		}
-
-		info.HardlinkCount = count
-		info.IsHardlinked = count > 1
-
-		// Only process non-hardlinked movies
-		if !info.IsHardlinked {
-			// Check if movie exists in qBittorrent if client is available
-			if o.qbittorrentClient != nil {
-				torrent, err := o.qbittorrentClient.GetTorrentByPath(ctx, movie.MovieFile.Path)
-				if err != nil {
-					o.logger.Warn().Err(err).Str("movie", info.Title).Msg("Failed to check qBittorrent status")
-				} else if torrent != nil {
-					info.QBittorrentHash = torrent.Hash
-					info.IsSeeding = torrent.IsSeeding
-				}
+			// Only process movies with imported files
+			if info.FileImported.IsZero() {
+				return nil
 			}
 
-			nonHardlinkedMovies = append(nonHardlinkedMovies, info)
-		}
+			// Check hardlink count
+			count, err := hardlink.GetHardlinkCount(movie.MovieFile.Path)
+			if err != nil {
+				o.logger.Warn().
+					Err(err).
+					Str("movie", info.Title).
+					Str("path", movie.MovieFile.Path).
+					Msg("Failed to check hardlink status")
+				return nil // Continue processing other movies
+			}
+
+			info.HardlinkCount = count
+			info.IsHardlinked = count > 1
+
+			// Only process non-hardlinked movies
+			if !info.IsHardlinked {
+				// Check if movie exists in qBittorrent if client is available
+				if o.qbittorrentClient != nil {
+					torrent, err := o.qbittorrentClient.GetTorrentByPath(ctx, movie.MovieFile.Path)
+					if err != nil {
+						o.logger.Warn().Err(err).Str("movie", info.Title).Msg("Failed to check qBittorrent status")
+					} else if torrent != nil {
+						info.QBittorrentHash = torrent.Hash
+						info.IsSeeding = torrent.IsSeeding
+					}
+				}
+
+				results <- info
+			}
+
+			return nil
+		})
+	}
+
+	// Wait for all goroutines to complete
+	go func() {
+		g.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	for info := range results {
+		nonHardlinkedMovies = append(nonHardlinkedMovies, info)
+		processedCount++
 	}
 
 	o.logger.Info().
