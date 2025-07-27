@@ -239,3 +239,38 @@ func (c *Client) GetMovieInfo(movie *radarr.Movie, tags []*starr.Tag) MovieInfo 
 
 	return info
 }
+
+// GetCustomFormats retrieves all custom formats from Radarr
+func (c *Client) GetCustomFormats(ctx context.Context) ([]*radarr.CustomFormatOutput, error) {
+	formats, err := c.client.GetCustomFormatsContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get custom formats: %w", err)
+	}
+
+	c.logger.Debug().Msgf("Retrieved %d custom formats from Radarr", len(formats))
+	return formats, nil
+}
+
+// GetMovieFile retrieves detailed movie file information including custom formats
+func (c *Client) GetMovieFile(ctx context.Context, fileID int64) (*radarr.MovieFile, error) {
+	// Get the movie file details
+	movieFile, err := c.client.GetMovieFileByIDContext(ctx, fileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get movie file ID %d: %w", fileID, err)
+	}
+
+	return movieFile, nil
+}
+
+// UpdateMovie updates a movie in Radarr (for monitoring status, tags, etc)
+func (c *Client) UpdateMovie(ctx context.Context, movie *radarr.Movie) (*radarr.Movie, error) {
+	updatedMovie, err := c.client.UpdateMovieContext(ctx, movie.ID, movie, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update movie ID %d: %w", movie.ID, err)
+	}
+
+	c.logger.Info().Int64("movie_id", movie.ID).Str("title", movie.Title).
+		Bool("monitored", movie.Monitored).
+		Msg("Successfully updated movie")
+	return updatedMovie, nil
+}

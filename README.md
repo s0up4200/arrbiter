@@ -44,6 +44,7 @@ arrbiter delete
 - **Smart Cleanup**: Remove unwatched, low-rated, or old content automatically
 - **Request Tracking**: Clean up movies people requested but never watched
 - **Watch Analytics**: Integration with Tautulli for viewing history
+- **Quality Upgrades**: Find and upgrade movies missing custom formats
 - **Hardlink Management**: Fix storage issues with qBittorrent integration
 - **Multiple Safety Nets**: Dry-run mode, confirmations, and detailed logging
 - **Highly Configurable**: Powerful filter expressions for any cleanup scenario
@@ -234,6 +235,15 @@ arrbiter hardlink --no-confirm
 
 # Dry run to see what would be done
 arrbiter hardlink --dry-run
+
+# Find and upgrade movies missing custom formats
+arrbiter upgrade
+
+# Upgrade in unattended mode (upgrade 5 movies)
+arrbiter upgrade --unattended 5
+
+# Override match mode and disable monitoring
+arrbiter upgrade --match any --no-monitor
 ```
 
 The tool will process ALL filters defined in your config and show results grouped by which filter matched.
@@ -651,6 +661,74 @@ Add Overseerr settings to your `config.yaml` as shown in the [Configuration](#co
 2. Movies are matched by TMDB ID
 3. Request information includes who requested, when, status, and who approved
 4. The most recent request is used if multiple exist for the same movie
+
+## Upgrade Movies to Better Custom Formats
+
+The upgrade command helps ensure your library meets quality standards by finding movies that don't have your preferred custom formats and triggering upgrade searches in Radarr.
+
+### Configuration
+
+Configure your target custom formats in `config.yaml`:
+
+```yaml
+upgrade:
+  # Custom formats to look for when upgrading movies
+  custom_formats:
+    - "HD Bluray Tier 01"
+    - "HD Bluray Tier 02"
+    - "HD Bluray Tier 03"
+  
+  # Match mode for custom formats:
+  # - "all": Movie must have ALL specified custom formats
+  # - "any": Movie must have at least ONE of the specified custom formats
+  match_mode: all
+  
+  # Automatically monitor upgraded movies
+  auto_monitor: true
+```
+
+### Usage
+
+```bash
+# Interactive mode - prompts for how many movies to upgrade
+$ arrbiter upgrade
+
+Found 12 movies missing custom formats:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MOVIE                                              YEAR            CURRENT FORMATS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The Matrix                                         1999            WEB 720p
+Inception                                          2010            None
+The Dark Knight                                    2008            HDTV 1080p
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+How many movies would you like to upgrade? [0-12]: 3
+
+# Unattended mode - automatically upgrade N movies
+$ arrbiter upgrade --unattended 5
+
+# Override match mode
+$ arrbiter upgrade --match any  # Find movies missing ANY format
+$ arrbiter upgrade --match all  # Find movies missing ALL formats (default)
+
+# Don't monitor movies after upgrade search
+$ arrbiter upgrade --no-monitor
+```
+
+### Command Options
+
+- `--unattended N`: Run without prompts, upgrading N movies
+- `--match any|all`: Override the match mode from config
+- `--no-monitor`: Don't enable monitoring for upgraded movies
+
+The command will:
+1. Scan your library for movies missing the configured custom formats
+2. Display a list of upgrade candidates with their current formats
+3. Let you choose how many to upgrade (or use --unattended)
+4. Randomly select movies if upgrading less than the total found
+5. Enable monitoring if configured and movie isn't already monitored
+6. Trigger Radarr searches in batches to find better versions
 
 ## Hardlink Management
 

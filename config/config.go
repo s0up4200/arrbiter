@@ -77,6 +77,11 @@ func setDefaults(v *viper.Viper) {
 	// Logging defaults
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.color", true)
+
+	// Upgrade defaults
+	v.SetDefault("upgrade.custom_formats", []string{})
+	v.SetDefault("upgrade.match_mode", "all")
+	v.SetDefault("upgrade.auto_monitor", true)
 }
 
 // validate checks if the configuration is valid
@@ -98,6 +103,11 @@ func validate(cfg *Config) error {
 	}
 	if !validLevels[cfg.Logging.Level] {
 		return fmt.Errorf("invalid logging level: %s", cfg.Logging.Level)
+	}
+
+	// Validate upgrade match mode
+	if cfg.Upgrade.MatchMode != "" && cfg.Upgrade.MatchMode != "any" && cfg.Upgrade.MatchMode != "all" {
+		return fmt.Errorf("invalid upgrade.match_mode: %s (must be 'any' or 'all')", cfg.Upgrade.MatchMode)
 	}
 
 	return nil
@@ -177,6 +187,14 @@ logging:
   level: info
   format: console
   color: true
+
+upgrade:
+  # Custom formats to upgrade to (e.g., ["Remux-1080p", "Bluray-1080p"])
+  custom_formats: []
+  # Match mode: "all" (must match all formats) or "any" (match any format)
+  match_mode: all
+  # Automatically monitor upgraded movies
+  auto_monitor: true
 `
 		return os.WriteFile(configPath, []byte(defaultConfig), 0644)
 	}
