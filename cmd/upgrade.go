@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -98,11 +101,11 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("Found %d %s missing custom formats:\n\n", len(filteredResults), movieText)
 
-	fmt.Println(strings.Repeat("━", 80))
-	fmt.Printf("%-50s %-15s %s\n", "MOVIE", "YEAR", "CURRENT FORMATS")
-	fmt.Println(strings.Repeat("━", 80))
+	fmt.Println(strings.Repeat("━", 85))
+	fmt.Printf("%-4s %-50s %-15s %s\n", "#", "MOVIE", "YEAR", "CURRENT FORMATS")
+	fmt.Println(strings.Repeat("━", 85))
 
-	for _, result := range filteredResults {
+	for i, result := range filteredResults {
 		// Build current custom formats string
 		currentFormats := "None"
 		if len(result.CurrentFormats) > 0 {
@@ -115,12 +118,13 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 			title = title[:45] + "..."
 		}
 
-		fmt.Printf("%-50s %-15d %s\n", title, result.Movie.Year, currentFormats)
+		fmt.Printf("%-4d %-50s %-15d %s\n", i+1, title, result.Movie.Year, currentFormats)
 	}
-	fmt.Println(strings.Repeat("━", 80))
+	fmt.Println(strings.Repeat("━", 85))
 
 	// Determine how many movies to upgrade
 	var upgradeCount int
+	var selectedResults []radarr.UpgradeResult
 
 	if unattendedCount > 0 {
 		// Unattended mode
@@ -135,33 +139,87 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\n[UNATTENDED MODE] Upgrading %d %s\n", upgradeCount, movieText)
 	} else {
 		// Interactive mode
-		fmt.Printf("\nHow many movies would you like to upgrade? [0-%d]: ", len(filteredResults))
-		_, err = fmt.Scanln(&upgradeCount)
-		if err != nil {
-			return fmt.Errorf("failed to read input: %w", err)
-		}
-
-		if upgradeCount < 0 || upgradeCount > len(filteredResults) {
-			return fmt.Errorf("invalid number: must be between 0 and %d", len(filteredResults))
-		}
-
-		if upgradeCount == 0 {
+		fmt.Printf("\nEnter movie numbers to upgrade (comma-separated, e.g. 1,3,5) or 'all' for all [Enter to cancel]: ")
+		
+		scanner := bufio.NewScanner(os.Stdin)
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
+			// No input (Ctrl+D or similar)
 			fmt.Println("No movies selected for upgrade.")
 			return nil
 		}
+		input := scanner.Text()
+		
+		input = strings.TrimSpace(input)
+		
+		if input == "" {
+			fmt.Println("No movies selected for upgrade.")
+			return nil
+		}
+		
+		var selectedIndices []int
+		
+		if strings.ToLower(input) == "all" {
+			// Select all movies
+			for i := range filteredResults {
+				selectedIndices = append(selectedIndices, i)
+			}
+		} else {
+			// Parse comma-separated numbers
+			parts := strings.Split(input, ",")
+			seen := make(map[int]bool)
+			
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				
+				num, err := strconv.Atoi(part)
+				if err != nil {
+					return fmt.Errorf("invalid number '%s': must be a positive integer", part)
+				}
+				
+				if num < 1 || num > len(filteredResults) {
+					return fmt.Errorf("invalid movie number %d: must be between 1 and %d", num, len(filteredResults))
+				}
+				
+				// Convert to 0-based index and check for duplicates
+				idx := num - 1
+				if !seen[idx] {
+					selectedIndices = append(selectedIndices, idx)
+					seen[idx] = true
+				}
+			}
+			
+			if len(selectedIndices) == 0 {
+				fmt.Println("No valid movies selected for upgrade.")
+				return nil
+			}
+		}
+		
+		// Build selected results from indices
+		for _, idx := range selectedIndices {
+			selectedResults = append(selectedResults, filteredResults[idx])
+		}
+		upgradeCount = len(selectedResults)
 	}
 
-	// Select movies to upgrade
-	var selectedResults []radarr.UpgradeResult
-	if upgradeCount == len(filteredResults) {
-		selectedResults = filteredResults
-	} else {
-		// Randomly select movies
-		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-		indices := rng.Perm(len(filteredResults))[:upgradeCount]
-		
-		for _, idx := range indices {
-			selectedResults = append(selectedResults, filteredResults[idx])
+	// For unattended mode, keep the original random selection logic
+	if unattendedCount > 0 {
+		selectedResults = nil
+		if upgradeCount == len(filteredResults) {
+			selectedResults = filteredResults
+		} else {
+			// Randomly select movies
+			rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+			indices := rng.Perm(len(filteredResults))[:upgradeCount]
+			
+			for _, idx := range indices {
+				selectedResults = append(selectedResults, filteredResults[idx])
+			}
 		}
 	}
 

@@ -259,9 +259,6 @@ func (c *Client) GetMovieFile(ctx context.Context, fileID int64) (*radarr.MovieF
 		return nil, fmt.Errorf("failed to get movie file ID %d: %w", fileID, err)
 	}
 
-	c.logger.Debug().Int64("file_id", fileID).Str("path", movieFile.Path).
-		Interface("custom_formats", movieFile.CustomFormats).
-		Msg("Retrieved movie file details")
 	return movieFile, nil
 }
 

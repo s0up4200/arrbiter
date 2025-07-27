@@ -77,12 +77,31 @@ func (o *Operations) ScanMoviesForUpgrade(ctx context.Context, opts UpgradeOptio
 			isAvailable = o.IsMovieAvailable(movie)
 		}
 
-		// Get current custom formats (we already checked MovieFile is not nil above)
+		// Get current custom formats
 		var currentFormats []string
 		currentScore := movie.MovieFile.CustomFormatScore
-		for _, cf := range movie.MovieFile.CustomFormats {
-			if name, ok := formatNameMap[cf.ID]; ok {
-				currentFormats = append(currentFormats, name)
+		
+		// The bulk movie API might not include custom formats, so fetch the movie file separately
+		movieFile, err := o.client.GetMovieFile(ctx, movie.MovieFile.ID)
+		if err != nil {
+			o.logger.Warn().
+				Err(err).
+				Int64("file_id", movie.MovieFile.ID).
+				Str("movie", movie.Title).
+				Msg("Failed to get movie file details, using data from bulk API")
+			// Fall back to the data we have
+			for _, cf := range movie.MovieFile.CustomFormats {
+				if cf != nil && cf.Name != "" {
+					currentFormats = append(currentFormats, cf.Name)
+				}
+			}
+		} else {
+			// Use the detailed movie file data
+			currentScore = movieFile.CustomFormatScore
+			for _, cf := range movieFile.CustomFormats {
+				if cf != nil && cf.Name != "" {
+					currentFormats = append(currentFormats, cf.Name)
+				}
 			}
 		}
 
