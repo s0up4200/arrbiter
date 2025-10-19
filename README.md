@@ -744,7 +744,7 @@ The `hardlink` command helps ensure proper hardlinking between Radarr and qBitto
 
 ### Configuration
 
-Add qBittorrent settings to your `config.yaml` as shown in the [Configuration](#configuration) section above.
+Add qBittorrent settings to your `config.yaml` as shown in the [Configuration](#configuration) section above. If you're using qui as a transparent proxy, you can omit the username/password and arrbiter will skip the login step.
 
 ### Usage
 

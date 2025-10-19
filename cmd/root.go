@@ -114,8 +114,8 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create qBittorrent client if URL and username are provided
-	if cfg.QBittorrent.URL != "" && cfg.QBittorrent.Username != "" {
+	// Create qBittorrent client if URL is provided
+	if cfg.QBittorrent.URL != "" {
 		qbittorrentClient, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to create qBittorrent client, continuing without torrent integration")
@@ -448,14 +448,18 @@ func runTest(cmd *cobra.Command, args []string) error {
 	}
 
 	// Test qBittorrent if configured
-	if cfg.QBittorrent.URL != "" && cfg.QBittorrent.Username != "" {
+	if cfg.QBittorrent.URL != "" {
 		logger.Info().Str("url", cfg.QBittorrent.URL).Msg("Testing qBittorrent connection")
 		// Try to create a client to test the connection
-		_, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
+		client, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
 		if err != nil {
 			logger.Error().Err(err).Msg("✗ qBittorrent connection failed")
 		} else {
-			logger.Info().Msg("✓ qBittorrent connection successful")
+			if _, err := client.GetAllTorrents(context.Background()); err != nil {
+				logger.Warn().Err(err).Msg("qBittorrent reachable but API call failed (check authentication)")
+			} else {
+				logger.Info().Msg("✓ qBittorrent connection successful")
+			}
 		}
 	} else {
 		logger.Info().Msg("qBittorrent integration: Not configured")

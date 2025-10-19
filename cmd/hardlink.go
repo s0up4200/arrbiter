@@ -37,8 +37,8 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
 	// Check if qBittorrent is configured
-	if cfg.QBittorrent.URL == "" || cfg.QBittorrent.Username == "" {
-		return fmt.Errorf("qBittorrent configuration missing. Please set qbittorrent.url and qbittorrent.username in config")
+	if cfg.QBittorrent.URL == "" {
+		return fmt.Errorf("qBittorrent configuration missing. Please set qbittorrent.url in config")
 	}
 
 	// Scan for non-hardlinked movies

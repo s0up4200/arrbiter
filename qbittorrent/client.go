@@ -30,26 +30,30 @@ func NewClient(url, username, password string, logger zerolog.Logger) (*Client, 
 	if url == "" {
 		return nil, fmt.Errorf("qBittorrent URL cannot be empty")
 	}
-	if username == "" {
-		return nil, fmt.Errorf("qBittorrent username cannot be empty")
-	}
 
-	// Create client with credentials
+	// Create client with credentials (username/password may be empty when using a proxy)
 	client := qbittorrent.NewClient(qbittorrent.Config{
 		Host:     url,
 		Username: username,
 		Password: password,
 	})
 
-	// Test connection by logging in
-	if err := client.Login(); err != nil {
-		return nil, fmt.Errorf("failed to connect to qBittorrent at %s: %w", url, err)
-	}
+	if username != "" {
+		// Test connection by logging in when credentials are provided
+		if err := client.Login(); err != nil {
+			return nil, fmt.Errorf("failed to connect to qBittorrent at %s: %w", url, err)
+		}
 
-	logger.Debug().
-		Str("url", url).
-		Str("username", username).
-		Msg("successfully connected to qBittorrent")
+		logger.Debug().
+			Str("url", url).
+			Str("username", username).
+			Msg("successfully connected to qBittorrent")
+	} else {
+		// No credentials were provided. Assume upstream proxy handles authentication.
+		logger.Debug().
+			Str("url", url).
+			Msg("initialized qBittorrent client without credentials (skipping login)")
+	}
 
 	return &Client{
 		client: client,
