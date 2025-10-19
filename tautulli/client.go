@@ -13,7 +13,26 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// Client wraps the Tautulli API
+const (
+	// defaultTimeout is the default HTTP client timeout.
+	defaultTimeout = 30 * time.Second
+
+	// defaultHistoryLimit is the default number of history records to fetch.
+	defaultHistoryLimit = 1000
+
+	// imdbGUIDPrefix is the prefix for IMDB GUIDs in Plex.
+	imdbGUIDPrefix = "com.plexapp.agents.imdb://"
+)
+
+// historyOptions contains parameters for history queries.
+type historyOptions struct {
+	guid   string
+	search string
+	user   string
+	limit  int
+}
+
+// Client provides access to the Tautulli API for retrieving Plex watch history.
 type Client struct {
 	baseURL    string
 	apiKey     string
@@ -21,39 +40,75 @@ type Client struct {
 	logger     zerolog.Logger
 }
 
-// NewClient creates a new Tautulli client
+// NewClient creates a new Tautulli client and validates the connection.
+// It returns an error if the API key is invalid or the server is unreachable.
 func NewClient(baseURL, apiKey string, logger zerolog.Logger) (*Client, error) {
+	if baseURL == "" {
+		return nil, fmt.Errorf("baseURL cannot be empty")
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("apiKey cannot be empty")
+	}
+
 	// Ensure base URL ends without slash
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	client := &Client{
 		baseURL:    baseURL,
 		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{Timeout: defaultTimeout},
 		logger:     logger,
 	}
 
-	// Test the connection
-	if err := client.TestConnection(); err != nil {
+	// Test the connection with a short context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.testConnection(ctx); err != nil {
 		return nil, fmt.Errorf("failed to connect to Tautulli: %w", err)
 	}
 
 	return client, nil
 }
 
-// TestConnection tests the connection to Tautulli
-func (c *Client) TestConnection() error {
-	params := url.Values{
-		"apikey": {c.apiKey},
-		"cmd":    {"get_server_info"},
+// testConnection validates the connection to Tautulli by calling get_server_info.
+func (c *Client) testConnection(ctx context.Context) error {
+	var result struct {
+		Response struct {
+			Result  string `json:"result"`
+			Message string `json:"message"`
+		} `json:"response"`
 	}
 
-	requestURL := fmt.Sprintf("%s/api/v2?%s", c.baseURL, params.Encode())
-	//c.logger.Debug().Str("url", requestURL).Msg("Testing Tautulli connection")
-
-	resp, err := c.httpClient.Get(requestURL)
-	if err != nil {
+	if err := c.doAPIRequest(ctx, "get_server_info", nil, &result); err != nil {
 		return err
+	}
+
+	if result.Response.Result != "success" {
+		return fmt.Errorf("API returned error: %s", result.Response.Message)
+	}
+
+	return nil
+}
+
+// doAPIRequest performs a generic API request to Tautulli.
+func (c *Client) doAPIRequest(ctx context.Context, cmd string, params url.Values, result interface{}) error {
+	if params == nil {
+		params = url.Values{}
+	}
+	params.Set("apikey", c.apiKey)
+	params.Set("cmd", cmd)
+
+	requestURL := fmt.Sprintf("%s/api/v2?%s", c.baseURL, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("executing request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -61,113 +116,100 @@ func (c *Client) TestConnection() error {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+		return fmt.Errorf("decoding response: %w", err)
 	}
 
-	// Response received successfully
-
-	if response, ok := result["response"].(map[string]interface{}); ok {
-		if res, ok := response["result"].(string); ok && res == "success" {
-			return nil
-		}
-		// Log unexpected result
-		if res, ok := response["result"]; ok {
-			c.logger.Error().Str("result", fmt.Sprintf("%v", res)).Msg("Unexpected result value")
-		}
-		if msg, ok := response["message"]; ok {
-			return fmt.Errorf("tautulli error: %v", msg)
-		}
-	}
-
-	return fmt.Errorf("invalid response from Tautulli: %+v", result)
+	return nil
 }
 
-// GetMovieWatchStatus gets the watch status for a movie
+// GetMovieWatchStatus gets the watch status for a movie.
+// Deprecated: Use GetMovieWatchStatusWithUsers for per-user data.
 func (c *Client) GetMovieWatchStatus(ctx context.Context, imdbID, tmdbID, title string, minWatchPercent float64) (*MovieWatchStatus, error) {
 	status := &MovieWatchStatus{
 		IMDbID: imdbID,
 		TMDbID: tmdbID,
 	}
 
+	records, err := c.findMovieRecords(ctx, imdbID, title)
+	if err != nil {
+		return status, fmt.Errorf("finding movie records: %w", err)
+	}
+
+	c.processHistoryRecords(records, status, minWatchPercent)
+	return status, nil
+}
+
+// findMovieRecords finds history records for a movie by IMDB ID or title.
+func (c *Client) findMovieRecords(ctx context.Context, imdbID, title string) ([]HistoryRecord, error) {
 	// Try searching by IMDB ID first
 	if imdbID != "" {
-		history, err := c.getHistory(ctx, fmt.Sprintf("com.plexapp.agents.imdb://%s", imdbID), "", "movie", "")
+		opts := historyOptions{
+			guid:  imdbGUIDPrefix + imdbID,
+			limit: defaultHistoryLimit,
+		}
+		history, err := c.getHistory(ctx, opts)
 		if err == nil && len(history.Response.Data.Data) > 0 {
-			c.processHistoryRecords(history.Response.Data.Data, status, minWatchPercent)
-			return status, nil
+			return history.Response.Data.Data, nil
 		}
 	}
 
 	// Try searching by title
 	if title != "" {
-		history, err := c.getHistory(ctx, "", title, "movie", "")
-		if err == nil && len(history.Response.Data.Data) > 0 {
-			// Filter results to match title more precisely
-			var matchedRecords []HistoryRecord
-			for _, record := range history.Response.Data.Data {
-				if strings.EqualFold(record.Title, title) || strings.EqualFold(record.FullTitle, title) {
-					matchedRecords = append(matchedRecords, record)
-				}
-			}
-			if len(matchedRecords) > 0 {
-				c.processHistoryRecords(matchedRecords, status, minWatchPercent)
-				return status, nil
+		opts := historyOptions{
+			search: title,
+			limit:  defaultHistoryLimit,
+		}
+		history, err := c.getHistory(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		// Filter results to match title more precisely
+		var matchedRecords []HistoryRecord
+		titleLower := strings.ToLower(title)
+		for _, record := range history.Response.Data.Data {
+			if strings.ToLower(record.Title) == titleLower || strings.ToLower(record.FullTitle) == titleLower {
+				matchedRecords = append(matchedRecords, record)
 			}
 		}
+		return matchedRecords, nil
 	}
 
-	// No watch history found
-	return status, nil
+	return nil, nil
 }
 
-// getHistory retrieves history from Tautulli API
-func (c *Client) getHistory(ctx context.Context, guid, search, mediaType, user string) (*HistoryResponse, error) {
+// getHistory retrieves history from Tautulli API with the specified filters.
+func (c *Client) getHistory(ctx context.Context, opts historyOptions) (*HistoryResponse, error) {
 	params := url.Values{
-		"apikey":     {c.apiKey},
-		"cmd":        {"get_history"},
-		"media_type": {mediaType},
-		"length":     {"1000"}, // Get more records
+		"media_type": {"movie"},
+		"length":     {strconv.Itoa(opts.limit)},
 	}
 
-	if guid != "" {
-		params.Set("guid", guid)
+	if opts.guid != "" {
+		params.Set("guid", opts.guid)
 	}
-	if search != "" {
-		params.Set("search", search)
+	if opts.search != "" {
+		params.Set("search", opts.search)
 	}
-	if user != "" {
-		params.Set("user", user)
-	}
-
-	requestURL := fmt.Sprintf("%s/api/v2?%s", c.baseURL, params.Encode())
-	c.logger.Debug().
-		Msg("Making Tautulli API request")
-
-	req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	if opts.user != "" {
+		params.Set("user", opts.user)
 	}
 
 	var history HistoryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&history); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := c.doAPIRequest(ctx, "get_history", params, &history); err != nil {
+		return nil, fmt.Errorf("get_history API call: %w", err)
 	}
 
 	if history.Response.Result != "success" {
-		return nil, fmt.Errorf("API returned error result")
+		return nil, fmt.Errorf("API returned error: %s", history.Response.Message)
 	}
+
+	c.logger.Debug().
+		Int("records", len(history.Response.Data.Data)).
+		Str("guid", opts.guid).
+		Str("search", opts.search).
+		Msg("Retrieved history from Tautulli")
 
 	return &history, nil
 }
@@ -205,7 +247,7 @@ func (c *Client) processHistoryRecords(records []HistoryRecord, status *MovieWat
 	}
 }
 
-// GetMovieWatchStatusWithUsers gets detailed watch status for a movie including per-user data
+// GetMovieWatchStatusWithUsers gets detailed watch status for a movie including per-user data.
 func (c *Client) GetMovieWatchStatusWithUsers(ctx context.Context, imdbID, tmdbID, title string, minWatchPercent float64) (*MovieWatchStatusWithUsers, error) {
 	status := &MovieWatchStatusWithUsers{
 		MovieWatchStatus: MovieWatchStatus{
@@ -215,32 +257,18 @@ func (c *Client) GetMovieWatchStatusWithUsers(ctx context.Context, imdbID, tmdbI
 		UserData: make(map[string]*UserWatchData),
 	}
 
-	// Get all history for this movie (across all users)
-	var allRecords []HistoryRecord
-
-	// Try searching by IMDB ID first
-	if imdbID != "" {
-		history, err := c.getHistory(ctx, fmt.Sprintf("com.plexapp.agents.imdb://%s", imdbID), "", "movie", "")
-		if err == nil && len(history.Response.Data.Data) > 0 {
-			allRecords = history.Response.Data.Data
-		}
+	records, err := c.findMovieRecords(ctx, imdbID, title)
+	if err != nil {
+		return status, fmt.Errorf("finding movie records: %w", err)
 	}
 
-	// If no records found, try searching by title
-	if len(allRecords) == 0 && title != "" {
-		history, err := c.getHistory(ctx, "", title, "movie", "")
-		if err == nil && len(history.Response.Data.Data) > 0 {
-			// Filter results to match title more precisely
-			for _, record := range history.Response.Data.Data {
-				if strings.EqualFold(record.Title, title) || strings.EqualFold(record.FullTitle, title) {
-					allRecords = append(allRecords, record)
-				}
-			}
-		}
-	}
+	c.processUserWatchData(records, status, minWatchPercent)
+	return status, nil
+}
 
-	// Process records by user
-	for _, record := range allRecords {
+// processUserWatchData processes history records and populates per-user watch data.
+func (c *Client) processUserWatchData(records []HistoryRecord, status *MovieWatchStatusWithUsers, minWatchPercent float64) {
+	for _, record := range records {
 		username := record.User
 		if username == "" {
 			continue
@@ -275,54 +303,29 @@ func (c *Client) GetMovieWatchStatusWithUsers(ctx context.Context, imdbID, tmdbI
 	}
 
 	// Update aggregate status
-	c.processHistoryRecords(allRecords, &status.MovieWatchStatus, minWatchPercent)
-
-	return status, nil
+	c.processHistoryRecords(records, &status.MovieWatchStatus, minWatchPercent)
 }
 
-// BatchGetMovieWatchStatus gets watch status for multiple movies efficiently
+// BatchGetMovieWatchStatus gets watch status for multiple movies efficiently.
+// Deprecated: Use BatchGetMovieWatchStatusWithUsers for per-user data.
 func (c *Client) BatchGetMovieWatchStatus(ctx context.Context, movies []MovieIdentifier, minWatchPercent float64) (map[string]*MovieWatchStatus, error) {
-	results := make(map[string]*MovieWatchStatus)
-
-	// Get all history at once (more efficient than individual queries)
-	allHistory, err := c.getHistory(ctx, "", "", "movie", "")
+	allHistory, err := c.getAllHistory(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get history: %w", err)
+		return nil, fmt.Errorf("getting all history: %w", err)
 	}
 
-	// Create maps for efficient lookup
-	historyByIMDB := make(map[string][]HistoryRecord)
-	historyByTitle := make(map[string][]HistoryRecord)
+	// Build lookup indices
+	indices := c.buildHistoryIndices(allHistory.Response.Data.Data)
 
-	for _, record := range allHistory.Response.Data.Data {
-		if record.IMDbID != "" {
-			historyByIMDB[record.IMDbID] = append(historyByIMDB[record.IMDbID], record)
-		}
-		titleLower := strings.ToLower(record.Title)
-		historyByTitle[titleLower] = append(historyByTitle[titleLower], record)
-	}
-
-	// Process each movie
+	results := make(map[string]*MovieWatchStatus, len(movies))
 	for _, movie := range movies {
 		status := &MovieWatchStatus{
 			IMDbID: movie.IMDbID,
 			TMDbID: strconv.FormatInt(movie.TMDbID, 10),
 		}
 
-		// Check by IMDB ID
-		if movie.IMDbID != "" {
-			if records, ok := historyByIMDB[movie.IMDbID]; ok {
-				c.processHistoryRecords(records, status, minWatchPercent)
-			}
-		}
-
-		// If not found by IMDB, check by title
-		if status.WatchCount == 0 && movie.Title != "" {
-			titleLower := strings.ToLower(movie.Title)
-			if records, ok := historyByTitle[titleLower]; ok {
-				c.processHistoryRecords(records, status, minWatchPercent)
-			}
-		}
+		records := c.findRecordsInIndices(movie, indices)
+		c.processHistoryRecords(records, status, minWatchPercent)
 
 		results[movie.IMDbID] = status
 	}
@@ -330,40 +333,19 @@ func (c *Client) BatchGetMovieWatchStatus(ctx context.Context, movies []MovieIde
 	return results, nil
 }
 
-// BatchGetMovieWatchStatusWithUsers gets detailed watch status with per-user data for multiple movies
+// BatchGetMovieWatchStatusWithUsers gets detailed watch status with per-user data for multiple movies.
 func (c *Client) BatchGetMovieWatchStatusWithUsers(ctx context.Context, movies []MovieIdentifier, minWatchPercent float64) (map[string]*MovieWatchStatusWithUsers, error) {
-	results := make(map[string]*MovieWatchStatusWithUsers)
-
-	// Get all history at once (more efficient than individual queries)
-	allHistory, err := c.getHistory(ctx, "", "", "movie", "")
+	allHistory, err := c.getAllHistory(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get history: %w", err)
+		return nil, fmt.Errorf("getting all history: %w", err)
 	}
 
 	c.logger.Debug().Int("record_count", len(allHistory.Response.Data.Data)).Msg("Retrieved history records from Tautulli")
 
-	// Create maps for efficient lookup
-	historyByIMDB := make(map[string][]HistoryRecord)
-	historyByTitle := make(map[string][]HistoryRecord)
+	// Build lookup indices
+	indices := c.buildHistoryIndices(allHistory.Response.Data.Data)
 
-	for i, record := range allHistory.Response.Data.Data {
-		// Log first few records to see user names
-		if i < 5 {
-			c.logger.Trace().
-				Str("user", record.User).
-				Int("user_id", record.UserID).
-				Str("title", record.Title).
-				Msg("Sample history record")
-		}
-
-		if record.IMDbID != "" {
-			historyByIMDB[record.IMDbID] = append(historyByIMDB[record.IMDbID], record)
-		}
-		titleLower := strings.ToLower(record.Title)
-		historyByTitle[titleLower] = append(historyByTitle[titleLower], record)
-	}
-
-	// Process each movie
+	results := make(map[string]*MovieWatchStatusWithUsers, len(movies))
 	for _, movie := range movies {
 		status := &MovieWatchStatusWithUsers{
 			MovieWatchStatus: MovieWatchStatus{
@@ -373,66 +355,8 @@ func (c *Client) BatchGetMovieWatchStatusWithUsers(ctx context.Context, movies [
 			UserData: make(map[string]*UserWatchData),
 		}
 
-		var relevantRecords []HistoryRecord
-
-		// Check by IMDB ID
-		if movie.IMDbID != "" {
-			if records, ok := historyByIMDB[movie.IMDbID]; ok {
-				relevantRecords = records
-			}
-		}
-
-		// If not found by IMDB, check by title
-		if len(relevantRecords) == 0 && movie.Title != "" {
-			titleLower := strings.ToLower(movie.Title)
-			if records, ok := historyByTitle[titleLower]; ok {
-				relevantRecords = records
-			}
-		}
-
-		// Process records by user
-		for _, record := range relevantRecords {
-			username := record.User
-			if username == "" {
-				continue
-			}
-
-			c.logger.Trace().
-				Str("movie", movie.Title).
-				Str("user", username).
-				Int("percent", record.PercentComplete).
-				Msg("Processing watch record")
-
-			// Initialize user data if not exists
-			if _, ok := status.UserData[username]; !ok {
-				status.UserData[username] = &UserWatchData{
-					Username: username,
-				}
-			}
-
-			userData := status.UserData[username]
-			userData.WatchCount++
-
-			// Check if watched
-			if record.IsWatched(minWatchPercent) {
-				userData.Watched = true
-			}
-
-			// Update max progress
-			progress := float64(record.PercentComplete)
-			if progress > userData.MaxProgress {
-				userData.MaxProgress = progress
-			}
-
-			// Update last watched time
-			watchTime := record.GetWatchedTime()
-			if watchTime.After(userData.LastWatched) {
-				userData.LastWatched = watchTime
-			}
-		}
-
-		// Update aggregate status
-		c.processHistoryRecords(relevantRecords, &status.MovieWatchStatus, minWatchPercent)
+		records := c.findRecordsInIndices(movie, indices)
+		c.processUserWatchData(records, status, minWatchPercent)
 
 		results[movie.IMDbID] = status
 	}
@@ -440,9 +364,54 @@ func (c *Client) BatchGetMovieWatchStatusWithUsers(ctx context.Context, movies [
 	return results, nil
 }
 
-// MovieIdentifier contains the identifiers for a movie
-type MovieIdentifier struct {
-	IMDbID string
-	TMDbID int64
-	Title  string
+// historyIndices contains pre-built indices for efficient lookups.
+type historyIndices struct {
+	byIMDB  map[string][]HistoryRecord
+	byTitle map[string][]HistoryRecord
+}
+
+// getAllHistory fetches all movie history records.
+func (c *Client) getAllHistory(ctx context.Context) (*HistoryResponse, error) {
+	opts := historyOptions{
+		limit: defaultHistoryLimit,
+	}
+	return c.getHistory(ctx, opts)
+}
+
+// buildHistoryIndices creates lookup maps for efficient record finding.
+func (c *Client) buildHistoryIndices(records []HistoryRecord) *historyIndices {
+	indices := &historyIndices{
+		byIMDB:  make(map[string][]HistoryRecord),
+		byTitle: make(map[string][]HistoryRecord),
+	}
+
+	for _, record := range records {
+		if record.IMDbID != "" {
+			indices.byIMDB[record.IMDbID] = append(indices.byIMDB[record.IMDbID], record)
+		}
+		titleLower := strings.ToLower(record.Title)
+		indices.byTitle[titleLower] = append(indices.byTitle[titleLower], record)
+	}
+
+	return indices
+}
+
+// findRecordsInIndices finds records for a movie using pre-built indices.
+func (c *Client) findRecordsInIndices(movie MovieIdentifier, indices *historyIndices) []HistoryRecord {
+	// Check by IMDB ID first
+	if movie.IMDbID != "" {
+		if records, ok := indices.byIMDB[movie.IMDbID]; ok {
+			return records
+		}
+	}
+
+	// Check by title
+	if movie.Title != "" {
+		titleLower := strings.ToLower(movie.Title)
+		if records, ok := indices.byTitle[titleLower]; ok {
+			return records
+		}
+	}
+
+	return nil
 }

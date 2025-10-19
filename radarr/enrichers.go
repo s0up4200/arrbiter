@@ -101,7 +101,7 @@ func (e *overseerrEnricher) EnrichMovies(ctx context.Context, movies []MovieInfo
 			}
 
 			// Convert and assign request data
-			requestData := overseerr.ConvertToMovieRequest(latestRequest)
+			requestData := latestRequest.ToMovieRequest()
 			movies[i].RequestedBy = requestData.RequestedBy
 			movies[i].RequestedByEmail = requestData.RequestedByEmail
 			movies[i].RequestDate = requestData.RequestDate

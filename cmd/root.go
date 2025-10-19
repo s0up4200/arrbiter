@@ -271,6 +271,15 @@ func runList(cmd *cobra.Command, args []string) error {
 					}
 					fmt.Printf("%s%s\n", indent, watchInfo)
 				}
+
+				// Show request info if available
+				if movie.IsRequested && movie.RequestedBy != "" {
+					requestInfo := fmt.Sprintf("Requested by: %s", movie.RequestedBy)
+					if !movie.RequestDate.IsZero() {
+						requestInfo += fmt.Sprintf(" on %s", movie.RequestDate.Format("2006-01-02"))
+					}
+					fmt.Printf("%s%s\n", indent, requestInfo)
+				}
 			}
 			if i < len(movies)-1 && cfg.Safety.ShowDetails {
 				fmt.Printf("\u2502\n")
