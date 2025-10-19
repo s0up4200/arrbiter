@@ -32,17 +32,13 @@ func (c *Client) FindAlternateTorrents(ctx context.Context, title string, year i
 	}
 
 	matches := make([]*TorrentMatch, 0, len(torrents))
-	yearToken := ""
-	if year > 0 {
-		yearToken = strconv.Itoa(year)
-	}
 
 	for _, torrent := range torrents {
 		if torrent == nil || torrent.Name == "" {
 			continue
 		}
 
-		match := evaluateTorrentMatch(torrent, titleTokens, yearToken, targetSize)
+		match := evaluateTorrentMatch(torrent, titleTokens, year, targetSize)
 		if match == nil {
 			continue
 		}
@@ -70,7 +66,7 @@ func (c *Client) FindAlternateTorrents(ctx context.Context, title string, year i
 }
 
 // evaluateTorrentMatch returns a TorrentMatch when the torrent is similar enough to the desired movie.
-func evaluateTorrentMatch(torrent *TorrentInfo, desiredTokens []string, yearToken string, targetSize int64) *TorrentMatch {
+func evaluateTorrentMatch(torrent *TorrentInfo, desiredTokens []string, targetYear int, targetSize int64) *TorrentMatch {
 	if len(desiredTokens) == 0 {
 		return nil
 	}
@@ -87,14 +83,27 @@ func evaluateTorrentMatch(torrent *TorrentInfo, desiredTokens []string, yearToke
 
 	score := titleMatch
 
-	hasYear := false
-	if yearToken != "" {
-		for _, token := range tokens {
-			if token == yearToken {
-				hasYear = true
-				score += 0.07
-				break
+	candidateYears := extractYearTokens(tokens)
+	conflictingYear := false
+	hasTargetYear := false
+
+	if targetYear > 0 {
+		for _, yr := range candidateYears {
+			if yr == targetYear {
+				hasTargetYear = true
+			} else {
+				conflictingYear = true
 			}
+		}
+		if conflictingYear {
+			// Another distinct year in the torrent title usually implies a different movie.
+			return nil
+		}
+		if hasTargetYear {
+			score += 0.07
+		} else {
+			// If the target year is known and no year is present, penalize slightly.
+			score -= 0.15
 		}
 	}
 
@@ -127,7 +136,7 @@ func evaluateTorrentMatch(torrent *TorrentInfo, desiredTokens []string, yearToke
 		Torrent:        torrent,
 		Score:          score,
 		TitleMatch:     titleMatch,
-		YearMatched:    hasYear,
+		YearMatched:    hasTargetYear,
 		SizeDifference: sizeDiff,
 	}
 }
@@ -160,6 +169,23 @@ func normalizeTitle(input string) string {
 	}
 
 	return strings.TrimSpace(b.String())
+}
+
+func extractYearTokens(tokens []string) []int {
+	var years []int
+	for _, token := range tokens {
+		if len(token) != 4 {
+			continue
+		}
+		year, err := strconv.Atoi(token)
+		if err != nil {
+			continue
+		}
+		if year >= 1900 && year <= 2100 {
+			years = append(years, year)
+		}
+	}
+	return years
 }
 
 // computeTokenMatch returns intersection proportion of desired tokens in candidate tokens.

@@ -40,7 +40,7 @@ func TestEvaluateTorrentMatch(t *testing.T) {
 		Size:      8 * 1024 * 1024 * 1024,
 	}
 
-	match := evaluateTorrentMatch(torrent, desired, "2023", 8*1024*1024*1024)
+	match := evaluateTorrentMatch(torrent, desired, 2023, 8*1024*1024*1024)
 	if match == nil {
 		t.Fatalf("expected torrent to match")
 	}
@@ -52,8 +52,24 @@ func TestEvaluateTorrentMatch(t *testing.T) {
 	}
 
 	// Large mismatches should return nil.
-	noMatch := evaluateTorrentMatch(torrent, tokenizeTitle("Different Film"), "2019", 4*1024*1024*1024)
+	noMatch := evaluateTorrentMatch(torrent, tokenizeTitle("Different Film"), 2019, 4*1024*1024*1024)
 	if noMatch != nil {
 		t.Fatalf("expected mismatch to return nil")
+	}
+}
+
+func TestEvaluateTorrentMatchRejectsConflictingYear(t *testing.T) {
+	desired := tokenizeTitle("Mad Max 1979")
+
+	torrent := &TorrentInfo{
+		Name:      "Mad.Max.2.1981.1080p.BluRay.x264-GRP",
+		Progress:  1.0,
+		IsSeeding: true,
+		Size:      7 * 1024 * 1024 * 1024,
+	}
+
+	match := evaluateTorrentMatch(torrent, desired, 1979, 7*1024*1024*1024)
+	if match != nil {
+		t.Fatalf("expected torrent with conflicting year to be rejected")
 	}
 }
