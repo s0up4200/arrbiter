@@ -92,7 +92,7 @@ func (c *Client) testConnection(ctx context.Context) error {
 }
 
 // doAPIRequest performs a generic API request to Tautulli.
-func (c *Client) doAPIRequest(ctx context.Context, cmd string, params url.Values, result interface{}) error {
+func (c *Client) doAPIRequest(ctx context.Context, cmd string, params url.Values, result any) error {
 	if params == nil {
 		params = url.Values{}
 	}

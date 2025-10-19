@@ -58,8 +58,8 @@ func TestNewClient(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/auth/me", r.URL.Path)
 				assert.Equal(t, "test-key", r.Header.Get("X-Api-Key"))
-				
-				resp := map[string]interface{}{
+
+				resp := map[string]any{
 					"id":          1,
 					"displayName": "Test User",
 				}
@@ -78,10 +78,10 @@ func TestNewClient(t *testing.T) {
 
 func TestClientOptions(t *testing.T) {
 	logger := zerolog.Nop()
-	
+
 	// Mock server for connection test
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(map[string]any{
 			"id":          1,
 			"displayName": "Test User",
 		})
@@ -189,14 +189,14 @@ func TestMediaRequest(t *testing.T) {
 	t.Run("IsMovieRequest", func(t *testing.T) {
 		movieReq := MediaRequest{Type: MediaTypeMovie}
 		tvReq := MediaRequest{Type: MediaTypeTV}
-		
+
 		assert.True(t, movieReq.IsMovieRequest())
 		assert.False(t, tvReq.IsMovieRequest())
 	})
 
 	t.Run("GetApprover", func(t *testing.T) {
 		approver := &User{DisplayName: "Admin"}
-		
+
 		tests := []struct {
 			name     string
 			req      MediaRequest

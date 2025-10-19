@@ -45,7 +45,6 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 	g.SetLimit(DefaultBatchSize)
 
 	for _, movie := range movies {
-		movie := movie
 		// Skip movies without files
 		if movie.MovieFile == nil || movie.MovieFile.Path == "" {
 			continue

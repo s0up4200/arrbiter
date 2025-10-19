@@ -13,7 +13,7 @@ import (
 func generateTestMovies(count int) []radarr.MovieInfo {
 	movies := make([]radarr.MovieInfo, count)
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		movies[i] = radarr.MovieInfo{
 			ID:         int64(i),
 			Title:      fmt.Sprintf("Movie %d", i),
@@ -59,7 +59,7 @@ func BenchmarkCompileFilter(b *testing.B) {
 	for _, tc := range expressions {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, err := CompileFilter(tc.expr)
 				if err != nil {
 					b.Fatal(err)
@@ -75,9 +75,8 @@ func BenchmarkCompileFilterWithCache(b *testing.B) {
 	expression := `hasTag("action") and Year > 2022`
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := compiler.Compile(expression)
 		if err != nil {
 			b.Fatal(err)
@@ -91,9 +90,8 @@ func BenchmarkEvaluateFilter(b *testing.B) {
 	filter, _ := CompileFilter(`hasTag("action") and Year > 2021`)
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		matches := 0
 		for _, movie := range movies {
 			if filter.Evaluate(movie) {
@@ -123,7 +121,7 @@ func BenchmarkEvaluateConcurrent(b *testing.B) {
 	for _, tc := range evaluators {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, err := tc.evaluator.Evaluate(ctx, filter, movies)
 				if err != nil {
 					b.Fatal(err)
@@ -154,9 +152,8 @@ func BenchmarkEvaluateBatch(b *testing.B) {
 	evaluator := NewConcurrentEvaluator()
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := evaluator.EvaluateBatch(ctx, compiled, movies)
 		if err != nil {
 			b.Fatal(err)
@@ -182,7 +179,7 @@ func BenchmarkHelperFunctions(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = hasTag("action")
 		}
 	})
@@ -192,7 +189,7 @@ func BenchmarkHelperFunctions(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = watchedBy("user1")
 		}
 	})
@@ -202,7 +199,7 @@ func BenchmarkHelperFunctions(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = getRating("imdb")
 		}
 	})

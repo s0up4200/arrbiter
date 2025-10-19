@@ -16,7 +16,7 @@ type lruCache struct {
 // entry is stored in the cache
 type entry struct {
 	key   string
-	value interface{}
+	value any
 }
 
 // newLRUCache creates a new LRU cache with the given size
@@ -29,7 +29,7 @@ func newLRUCache(size int) *lruCache {
 }
 
 // Get retrieves a value from the cache
-func (c *lruCache) Get(key string) (interface{}, bool) {
+func (c *lruCache) Get(key string) (any, bool) {
 	c.mu.RLock()
 	node, exists := c.items[key]
 	c.mu.RUnlock()
@@ -47,7 +47,7 @@ func (c *lruCache) Get(key string) (interface{}, bool) {
 }
 
 // Put adds or updates a value in the cache
-func (c *lruCache) Put(key string, value interface{}) {
+func (c *lruCache) Put(key string, value any) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

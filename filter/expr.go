@@ -1,6 +1,8 @@
 package filter
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -29,11 +31,9 @@ func WithCache(size int) ExprCompilerOption {
 }
 
 // WithCustomFunctions adds custom helper functions
-func WithCustomFunctions(funcs map[string]interface{}) ExprCompilerOption {
+func WithCustomFunctions(funcs map[string]any) ExprCompilerOption {
 	return func(c *exprCompiler) {
-		for name, fn := range funcs {
-			c.helperFuncs[name] = fn
-		}
+		maps.Copy(c.helperFuncs, funcs)
 	}
 }
 
@@ -49,8 +49,8 @@ func NewExprCompiler(opts ...ExprCompilerOption) Compiler {
 	}
 
 	// Initialize environment pool
-	c.envPool.New = func() interface{} {
-		return make(map[string]interface{}, 64) // Pre-size for typical use
+	c.envPool.New = func() any {
+		return make(map[string]any, 64) // Pre-size for typical use
 	}
 
 	return c
@@ -58,7 +58,7 @@ func NewExprCompiler(opts ...ExprCompilerOption) Compiler {
 
 // exprCompiler implements Compiler for expr-based filters
 type exprCompiler struct {
-	helperFuncs map[string]interface{}
+	helperFuncs map[string]any
 	cache       *lruCache
 	envPool     *sync.Pool // Pool for environment maps
 }
@@ -149,14 +149,14 @@ func (f *exprFilter) IsThreadSafe() bool {
 }
 
 // createHelperFunctions creates the static helper functions used during compilation
-func createHelperFunctions() map[string]interface{} {
-	funcs := make(map[string]interface{}, 32)
+func createHelperFunctions() map[string]any {
+	funcs := make(map[string]any, 32)
 	addHelperFunctions(funcs)
 	return funcs
 }
 
 // addHelperFunctions adds all helper functions to the provided map
-func addHelperFunctions(env map[string]interface{}) {
+func addHelperFunctions(env map[string]any) {
 	// Date helpers
 	env["daysSince"] = func(t time.Time) int {
 		return int(time.Since(t).Hours() / 24)
@@ -191,9 +191,9 @@ func addHelperFunctions(env map[string]interface{}) {
 }
 
 // createRuntimeEnvironment creates the runtime environment for filter evaluation
-func createRuntimeEnvironment(movie radarr.MovieInfo) map[string]interface{} {
+func createRuntimeEnvironment(movie radarr.MovieInfo) map[string]any {
 	// Pre-allocate with expected size
-	env := make(map[string]interface{}, 64)
+	env := make(map[string]any, 64)
 
 	// Add helper functions
 	addHelperFunctions(env)
@@ -265,12 +265,7 @@ func createHasTagFunc(tags []string) func(string) bool {
 	}
 	return func(tag string) bool {
 		target := strings.ToLower(tag)
-		for _, t := range lowerTags {
-			if t == target {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(lowerTags, target)
 	}
 }
 

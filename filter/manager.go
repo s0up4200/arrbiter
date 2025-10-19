@@ -3,6 +3,7 @@ package filter
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/s0up4200/arrbiter/radarr"
@@ -77,9 +78,7 @@ func (m *Manager) RegisterFilters(filters map[string]string) error {
 
 	// If all compiled successfully, register them
 	m.mu.Lock()
-	for name, filter := range compiled {
-		m.filters[name] = filter
-	}
+	maps.Copy(m.filters, compiled)
 	m.mu.Unlock()
 
 	return nil
@@ -126,9 +125,7 @@ func (m *Manager) EvaluateFilter(ctx context.Context, name string, movies []rada
 func (m *Manager) EvaluateAll(ctx context.Context, movies []radarr.MovieInfo) (map[string][]radarr.MovieInfo, error) {
 	m.mu.RLock()
 	filters := make(map[string]CompiledFilter, len(m.filters))
-	for name, filter := range m.filters {
-		filters[name] = filter
-	}
+	maps.Copy(filters, m.filters)
 	m.mu.RUnlock()
 
 	return m.evaluator.EvaluateBatch(ctx, filters, movies)
