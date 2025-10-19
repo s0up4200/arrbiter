@@ -52,7 +52,7 @@ func NewClient(url, username, password string, logger zerolog.Logger) (*Client, 
 		// No credentials were provided. Assume upstream proxy handles authentication.
 		logger.Debug().
 			Str("url", url).
-			Msg("initialized qBittorrent client without credentials (skipping login)")
+			Msg("successfully connected to qBittorrent")
 	}
 
 	return &Client{
