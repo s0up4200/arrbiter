@@ -45,6 +45,7 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 	g.SetLimit(DefaultBatchSize)
 
 	for _, movie := range movies {
+		movie := movie
 		// Skip movies without files
 		if movie.MovieFile == nil || movie.MovieFile.Path == "" {
 			continue
@@ -75,14 +76,27 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 
 			// Only process non-hardlinked movies
 			if !info.IsHardlinked {
-				// Check if movie exists in qBittorrent if client is available
 				if o.qbittorrentClient != nil {
+					// Check if movie exists in qBittorrent using original path
 					torrent, err := o.qbittorrentClient.GetTorrentByPath(ctx, movie.MovieFile.Path)
 					if err != nil {
 						o.logger.Warn().Err(err).Str("movie", info.Title).Msg("Failed to check qBittorrent status")
 					} else if torrent != nil {
 						info.QBittorrentHash = torrent.Hash
 						info.IsSeeding = torrent.IsSeeding
+					} else {
+						// Attempt to locate potential alternate torrents for re-import
+						targetSize := int64(0)
+						if movie.MovieFile != nil {
+							targetSize = movie.MovieFile.Size
+						}
+
+						matches, err := o.qbittorrentClient.FindAlternateTorrents(ctx, info.Title, info.Year, targetSize)
+						if err != nil {
+							o.logger.Warn().Err(err).Str("movie", info.Title).Msg("Failed to search alternate torrents")
+						} else if len(matches) > 0 {
+							info.AlternateTorrents = matches
+						}
 					}
 				}
 
@@ -117,6 +131,9 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 
 // ReimportMovieFromQBittorrent re-imports a movie from qBittorrent to create hardlinks
 func (o *Operations) ReimportMovieFromQBittorrent(ctx context.Context, movie MovieInfo) error {
+	if o.qbittorrentClient == nil {
+		return fmt.Errorf("qBittorrent client is not configured")
+	}
 	if movie.QBittorrentHash == "" {
 		return fmt.Errorf("movie not found in qBittorrent")
 	}
@@ -130,6 +147,30 @@ func (o *Operations) ReimportMovieFromQBittorrent(ctx context.Context, movie Mov
 		return fmt.Errorf("torrent not found")
 	}
 
+	return o.reimportMovieFromTorrent(ctx, movie, torrent)
+}
+
+// ReimportMovieFromTorrentMatch re-imports a movie using the provided torrent match.
+func (o *Operations) ReimportMovieFromTorrentMatch(ctx context.Context, movie MovieInfo, match *qbittorrent.TorrentMatch) error {
+	if o.qbittorrentClient == nil {
+		return fmt.Errorf("qBittorrent client is not configured")
+	}
+	if match == nil || match.Torrent == nil {
+		return fmt.Errorf("invalid torrent match")
+	}
+
+	torrent, err := o.qbittorrentClient.GetTorrentByHash(ctx, match.Torrent.Hash)
+	if err != nil {
+		return fmt.Errorf("failed to get torrent info: %w", err)
+	}
+	if torrent == nil {
+		return fmt.Errorf("torrent not found")
+	}
+
+	return o.reimportMovieFromTorrent(ctx, movie, torrent)
+}
+
+func (o *Operations) reimportMovieFromTorrent(ctx context.Context, movie MovieInfo, torrent *qbittorrent.TorrentInfo) error {
 	// Use manual import to re-import the file
 	// This will create a hardlink between qBittorrent and Radarr
 	importPath := torrent.GetFullPath()

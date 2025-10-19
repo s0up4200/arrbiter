@@ -77,13 +77,37 @@ func (c *Client) GetAllTorrents(ctx context.Context) ([]*TorrentInfo, error) {
 
 	// Pre-allocate slice for better performance
 	results := make([]*TorrentInfo, 0, len(torrents))
-	
+
 	for _, t := range torrents {
 		info := convertTorrentInfo(t)
 		results = append(results, info)
 	}
 
 	return results, nil
+}
+
+// GetTorrentByHash retrieves a single torrent by its hash.
+func (c *Client) GetTorrentByHash(ctx context.Context, hash string) (*TorrentInfo, error) {
+	if hash == "" {
+		return nil, fmt.Errorf("torrent hash cannot be empty")
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context cancelled: %w", err)
+	}
+
+	torrents, err := c.client.GetTorrents(qbittorrent.TorrentFilterOptions{
+		Hashes: []string{hash},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get torrent %s: %w", hash, err)
+	}
+
+	if len(torrents) == 0 {
+		return nil, nil
+	}
+
+	return convertTorrentInfo(torrents[0]), nil
 }
 
 // convertTorrentInfo converts a qBittorrent torrent to our TorrentInfo model
@@ -104,10 +128,10 @@ func convertTorrentInfo(t qbittorrent.Torrent) *TorrentInfo {
 		Category:       t.Category,
 		Tags:           parseTags(t.Tags),
 	}
-	
+
 	// Set seeding status based on state
 	info.IsSeeding = info.IsActivelySeeding()
-	
+
 	return info
 }
 
@@ -116,17 +140,17 @@ func parseTags(tags string) []string {
 	if tags == "" {
 		return nil
 	}
-	
+
 	parts := strings.Split(tags, ",")
 	result := make([]string, 0, len(parts))
-	
+
 	for _, tag := range parts {
 		tag = strings.TrimSpace(tag)
 		if tag != "" {
 			result = append(result, tag)
 		}
 	}
-	
+
 	return result
 }
 

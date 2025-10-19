@@ -9,13 +9,15 @@ import (
 	"github.com/rs/zerolog"
 	"golift.io/starr"
 	"golift.io/starr/radarr"
+
+	"github.com/s0up4200/arrbiter/qbittorrent"
 )
 
 // Client wraps the starr Radarr client with additional functionality
 type Client struct {
-	api      RadarrAPI
-	logger   zerolog.Logger
-	
+	api    RadarrAPI
+	logger zerolog.Logger
+
 	// Cache for frequently accessed data
 	tagCache      []*starr.Tag
 	tagCacheMutex sync.RWMutex
@@ -213,6 +215,8 @@ type MovieInfo struct {
 	// qBittorrent data
 	QBittorrentHash string // Hash of matching torrent in qBittorrent
 	IsSeeding       bool   // Whether the movie is currently seeding
+	// Alternate torrents
+	AlternateTorrents []*qbittorrent.TorrentMatch
 }
 
 // UserWatchInfo contains watch information for a specific user

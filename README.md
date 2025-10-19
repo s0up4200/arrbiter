@@ -739,6 +739,7 @@ The `hardlink` command helps ensure proper hardlinking between Radarr and qBitto
 - **Hardlink Detection**: Scans your Radarr library for movies that don't have hardlinks
 - **qBittorrent Integration**: Checks if non-hardlinked movies exist in qBittorrent
 - **Smart Re-importing**: Re-imports movies from qBittorrent to create proper hardlinks
+- **Alternate Torrents**: Suggests other qBittorrent torrents when the original release is missing
 - **Cleanup Options**: Deletes and re-searches for movies not found in qBittorrent
 
 ### Configuration
@@ -774,14 +775,33 @@ Status: ✗ Not found in qBittorrent
 
 → Delete file and search for new version? [y/n/q]: n
 ⊘ Skipped
+
+[3/3] Dune (2021)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Path: /movies/Dune (2021)/Dune.2021.1080p.mkv
+Size: 14.4 GB
+Hardlinks: 1 (not hardlinked)
+Status: △ Alternate torrents available in qBittorrent
+  [1] Dune.2021.2160p.HDR.x265-group2
+      Score 88% | Progress 100.0% | Complete | Year match | Size 24.0 GB (+66.7% vs library)
+  [2] Dune.2021.1080p.BluRay.x264-group3
+      Score 74% | Progress 100.0% | Complete | Size 11.0 GB (~same size)
+
+→ Choose alternate torrent to re-import [1-2/n/q]: 1
+✓ Re-imported using "Dune.2021.2160p.HDR.x265-group2"
 ```
+
+### Alternate Torrent Selection
+
+If the original torrent path no longer exists in qBittorrent, arrbiter now scores and displays alternate torrents that match the movie title. Pick one of the numbered options to re-import from that torrent (or skip). With `--no-confirm` the top-ranked torrent is used automatically. Alternate matching prefers completed, seeding torrents with similar names, years, and sizes, so you can replace non-hardlinked files without redownloading them.
 
 ### How It Works
 
 1. **Detection**: Uses system calls to check the hardlink count of each movie file
 2. **qBittorrent Search**: For non-hardlinked files, searches qBittorrent for matching torrents
-3. **Re-import**: If found in qBittorrent, uses Radarr's manual import to create a hardlink
-4. **Cleanup**: If not found, optionally deletes the file and triggers a new search in Radarr
+3. **Alternate Suggestions**: If the original torrent is gone, ranks other torrents in qBittorrent that match the movie
+4. **Re-import**: If found in qBittorrent, uses Radarr's manual import to create a hardlink
+5. **Cleanup**: If not found, optionally deletes the file and triggers a new search in Radarr
 
 ### Requirements
 

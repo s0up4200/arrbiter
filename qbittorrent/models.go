@@ -127,3 +127,12 @@ func (t *TorrentInfo) HasError() bool {
 func (t *TorrentInfo) IsMultiFile() bool {
 	return len(t.Files) > 1
 }
+
+// TorrentMatch represents a candidate torrent match for a given movie.
+type TorrentMatch struct {
+	Torrent        *TorrentInfo // Reference to the matched torrent
+	Score          float64      // Overall match score (0.0 - 1.0)
+	TitleMatch     float64      // Title token match ratio (0.0 - 1.0)
+	YearMatched    bool         // Whether the torrent name contains the movie year
+	SizeDifference int64        // Torrent size minus target size in bytes (if known)
+}

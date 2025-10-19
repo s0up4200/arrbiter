@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -70,22 +71,19 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 		if movie.MovieFile != nil && movie.MovieFile.Path != "" {
 			fmt.Printf("Path: %s\n", movie.MovieFile.Path)
 			if movie.MovieFile.Size > 0 {
-				sizeMB := float64(movie.MovieFile.Size) / 1024 / 1024
-				if sizeMB > 1024 {
-					fmt.Printf("Size: %.1f GB\n", sizeMB/1024)
-				} else {
-					fmt.Printf("Size: %.1f MB\n", sizeMB)
-				}
+				fmt.Printf("Size: %s\n", formatSize(movie.MovieFile.Size))
 			}
 		}
 
 		fmt.Printf("Hardlinks: %d (not hardlinked)\n", movie.HardlinkCount)
 
 		// Show qBittorrent status
+		statusHandled := false
+
 		if movie.IsSeeding {
 			fmt.Printf("Status: ✓ Found in qBittorrent (actively seeding)\n\n")
+			statusHandled = true
 
-			// Ask to re-import
 			if !dryRun {
 				response := "n"
 				if !noConfirmHardlink {
@@ -101,7 +99,6 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 					fmt.Printf("\nProcessing stopped by user.\n")
 					break
 				} else if response == "y" || response == "yes" {
-					// Re-import the movie
 					if err := operations.ReimportMovieFromQBittorrent(ctx, movie); err != nil {
 						logger.Error().Err(err).Str("movie", movie.Title).Msg("Failed to re-import movie")
 						fmt.Printf("✗ Failed to re-import: %v\n", err)
@@ -116,10 +113,98 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 			} else {
 				fmt.Printf("[DRY RUN] Would re-import from qBittorrent\n")
 			}
-		} else {
+		}
+
+		if !statusHandled && len(movie.AlternateTorrents) > 0 {
+			fmt.Printf("Status: △ Alternate torrents available in qBittorrent\n")
+			statusHandled = true
+
+			for idx, match := range movie.AlternateTorrents {
+				if match == nil || match.Torrent == nil {
+					continue
+				}
+
+				torrent := match.Torrent
+				sizeLabel := formatSize(torrent.Size)
+				diffLabel := ""
+
+				if movie.MovieFile != nil && movie.MovieFile.Size > 0 && torrent.Size > 0 {
+					percent := float64(match.SizeDifference) / float64(movie.MovieFile.Size) * 100
+					switch {
+					case percent > 1 || percent < -1:
+						diffLabel = fmt.Sprintf(" (%+.1f%% vs library)", percent)
+					case percent == 0:
+						diffLabel = " (same size)"
+					default:
+						diffLabel = " (~same size)"
+					}
+				}
+
+				statusParts := []string{
+					fmt.Sprintf("Score %.0f%%", match.Score*100),
+					fmt.Sprintf("Progress %.1f%%", torrent.Progress*100),
+				}
+
+				if torrent.IsSeeding {
+					statusParts = append(statusParts, "Seeding")
+				} else if torrent.Progress >= 1.0 {
+					statusParts = append(statusParts, "Complete")
+				}
+
+				if match.YearMatched {
+					statusParts = append(statusParts, "Year match")
+				}
+
+				fmt.Printf("  [%d] %s\n", idx+1, torrent.Name)
+				fmt.Printf("      %s | Size %s%s\n", strings.Join(statusParts, " | "), sizeLabel, diffLabel)
+			}
+			fmt.Println()
+
+			if !dryRun {
+				response := "n"
+				if !noConfirmHardlink {
+					fmt.Printf("→ Choose alternate torrent to re-import [1-%d/n/q]: ", len(movie.AlternateTorrents))
+					fmt.Scanln(&response)
+				} else {
+					response = "1"
+				}
+
+				response = strings.ToLower(strings.TrimSpace(response))
+
+				if response == "q" || response == "quit" {
+					fmt.Printf("\nProcessing stopped by user.\n")
+					break
+				} else if response == "n" || response == "" || response == "no" {
+					fmt.Printf("⊘ Skipped\n")
+					skippedCount++
+				} else {
+					index, err := strconv.Atoi(response)
+					if err != nil || index < 1 || index > len(movie.AlternateTorrents) {
+						fmt.Printf("⊘ Invalid selection (skipped)\n")
+						skippedCount++
+					} else {
+						match := movie.AlternateTorrents[index-1]
+						if err := operations.ReimportMovieFromTorrentMatch(ctx, movie, match); err != nil {
+							logger.Error().Err(err).Str("movie", movie.Title).Msg("Failed to re-import movie from alternate torrent")
+							fmt.Printf("✗ Failed to re-import: %v\n", err)
+						} else {
+							fmt.Printf("✓ Re-imported using \"%s\"\n", match.Torrent.Name)
+							reimportedCount++
+						}
+					}
+				}
+			} else {
+				if len(movie.AlternateTorrents) > 0 && movie.AlternateTorrents[0] != nil && movie.AlternateTorrents[0].Torrent != nil {
+					fmt.Printf("[DRY RUN] Would re-import using alternate torrent \"%s\"\n", movie.AlternateTorrents[0].Torrent.Name)
+				} else {
+					fmt.Printf("[DRY RUN] Would re-import using highest ranked alternate torrent\n")
+				}
+			}
+		}
+
+		if !statusHandled {
 			fmt.Printf("Status: ✗ Not found in qBittorrent\n\n")
 
-			// Ask to delete and re-search
 			if !dryRun {
 				response := "n"
 				if !noConfirmHardlink {
@@ -135,7 +220,6 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 					fmt.Printf("\nProcessing stopped by user.\n")
 					break
 				} else if response == "y" || response == "yes" {
-					// Delete and trigger new search
 					if err := operations.DeleteAndResearchMovie(ctx, movie); err != nil {
 						logger.Error().Err(err).Str("movie", movie.Title).Msg("Failed to delete and re-search movie")
 						fmt.Printf("✗ Failed to delete and re-search: %v\n", err)
@@ -187,4 +271,16 @@ func runHardlink(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func formatSize(bytes int64) string {
+	if bytes <= 0 {
+		return "unknown"
+	}
+
+	sizeMB := float64(bytes) / 1024.0 / 1024.0
+	if sizeMB > 1024 {
+		return fmt.Sprintf("%.1f GB", sizeMB/1024.0)
+	}
+	return fmt.Sprintf("%.1f MB", sizeMB)
 }
