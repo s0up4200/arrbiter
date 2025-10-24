@@ -41,21 +41,23 @@ func (c *Client) ProcessMovieFiles(ctx context.Context, movies []*radarr.Movie) 
 
 	// Use mutex to protect concurrent writes
 	var mu sync.Mutex
-	
+
 	for _, movie := range movies {
 		// Skip movies without files
 		if movie.MovieFile == nil || movie.MovieFile.ID == 0 {
 			continue
 		}
 
+		currentMovie := movie
+
 		g.Go(func() error {
 			// Fetch detailed movie file information
-			movieFile, err := c.GetMovieFile(ctx, movie.MovieFile.ID)
+			movieFile, err := c.GetMovieFile(ctx, currentMovie.MovieFile.ID)
 			if err != nil {
 				c.logger.Warn().
 					Err(err).
-					Int64("file_id", movie.MovieFile.ID).
-					Str("movie", movie.Title).
+					Int64("file_id", currentMovie.MovieFile.ID).
+					Str("movie", currentMovie.Title).
 					Msg("Failed to get movie file details")
 				// Continue processing other files
 				return nil
@@ -63,7 +65,7 @@ func (c *Client) ProcessMovieFiles(ctx context.Context, movies []*radarr.Movie) 
 
 			// Update the movie's file information
 			mu.Lock()
-			movie.MovieFile = movieFile
+			currentMovie.MovieFile = movieFile
 			mu.Unlock()
 
 			return nil
@@ -92,16 +94,18 @@ func (c *Client) BatchDeleteMovies(ctx context.Context, movies []MovieInfo, dele
 	errorChan := make(chan DeleteError, len(movies))
 
 	for _, movie := range movies {
+		currentMovie := movie
+
 		g.Go(func() error {
-			err := c.DeleteMovie(ctx, movie.ID, deleteFiles)
+			err := c.DeleteMovie(ctx, currentMovie.ID, deleteFiles)
 			if err != nil {
 				errorChan <- DeleteError{
-					MovieID:    movie.ID,
-					MovieTitle: movie.Title,
+					MovieID:    currentMovie.ID,
+					MovieTitle: currentMovie.Title,
 					Err:        err,
 				}
 			} else {
-				successChan <- movie.ID
+				successChan <- currentMovie.ID
 			}
 			return nil // Don't stop on individual errors
 		})
@@ -158,7 +162,7 @@ func (c *Client) BatchSearchMovies(ctx context.Context, movieIDs []int64) error 
 
 	for i := 0; i < len(movieIDs); i += batchSize {
 		start := i
-		end := min(start + batchSize, len(movieIDs))
+		end := min(start+batchSize, len(movieIDs))
 
 		batch := movieIDs[start:end]
 		g.Go(func() error {

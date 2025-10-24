@@ -50,9 +50,11 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 			continue
 		}
 
+		currentMovie := movie
+
 		g.Go(func() error {
 			// Convert to MovieInfo
-			info := o.client.GetMovieInfo(movie, tags)
+			info := o.client.GetMovieInfo(currentMovie, tags)
 
 			// Only process movies with imported files
 			if info.FileImported.IsZero() {
@@ -60,12 +62,12 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 			}
 
 			// Check hardlink count
-			count, err := hardlink.GetHardlinkCount(movie.MovieFile.Path)
+			count, err := hardlink.GetHardlinkCount(currentMovie.MovieFile.Path)
 			if err != nil {
 				o.logger.Warn().
 					Err(err).
 					Str("movie", info.Title).
-					Str("path", movie.MovieFile.Path).
+					Str("path", currentMovie.MovieFile.Path).
 					Msg("Failed to check hardlink status")
 				return nil // Continue processing other movies
 			}
@@ -77,7 +79,7 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 			if !info.IsHardlinked {
 				if o.qbittorrentClient != nil {
 					// Check if movie exists in qBittorrent using original path
-					torrent, err := o.qbittorrentClient.GetTorrentByPath(ctx, movie.MovieFile.Path)
+					torrent, err := o.qbittorrentClient.GetTorrentByPath(ctx, currentMovie.MovieFile.Path)
 					if err != nil {
 						o.logger.Warn().Err(err).Str("movie", info.Title).Msg("Failed to check qBittorrent status")
 					} else if torrent != nil {
@@ -86,8 +88,8 @@ func (o *Operations) ScanNonHardlinkedMovies(ctx context.Context) ([]MovieInfo, 
 					} else {
 						// Attempt to locate potential alternate torrents for re-import
 						targetSize := int64(0)
-						if movie.MovieFile != nil {
-							targetSize = movie.MovieFile.Size
+						if currentMovie.MovieFile != nil {
+							targetSize = currentMovie.MovieFile.Size
 						}
 
 						matches, err := o.qbittorrentClient.FindAlternateTorrents(ctx, info.Title, info.Year, targetSize)
