@@ -280,9 +280,16 @@ IMDBID         # string - IMDb identifier (e.g., "tt1234567")
 TMDBID         # int64 - The Movie Database ID
 
 # Status Properties
-Watched        # bool - Whether movie has been watched by any user
-WatchCount     # int - Total number of times watched by all users
+Watched        # bool - Whether any play met the watched threshold (min_watch_percent or Plex flag)
+WatchCount     # int - Total number of play sessions recorded (counts partial/abandoned plays too)
 WatchProgress  # float64 - Maximum watch progress percentage across all users
+```
+
+> **Watched vs. WatchCount**  
+> `Watched` flips to true once someone crosses the configured watch threshold (default 85%).  
+> `WatchCount` increments for each play session, even if nobody finished the movie. Use both when you need “never truly watched” *and* “never even started.”
+
+```yaml
 
 # Date Properties
 Added          # time.Time - When movie was added to Radarr
@@ -562,6 +569,61 @@ aggressive_cleanup: |
 - They check the watch status of specifically the person who requested it
 - Using `!notWatchedByRequester()` matches movies that either weren't requested OR were requested and watched
 - Using `!watchedByRequester()` matches movies that either weren't requested OR were requested but not watched
+
+#### Request Workflow Monitoring
+*Keep tabs on requests that need manual follow-up*
+
+```yaml
+# Flag requests that are still pending after two weeks
+request_pending_over_2_weeks: |
+  requestStatus("PENDING") and
+  requestedBefore(daysAgo(14))
+
+# Requests approved by an admin that the requester still hasn't watched
+approved_but_unwatched: |
+  approvedBy("admin") and
+  not watchedByRequester() and
+  Added < daysAgo(21)
+```
+
+#### Engagement Signals
+*Surface titles people asked for but never actually watched*
+
+```yaml
+# Popular additions nobody pressed play on
+popular_but_unwatched: |
+  Popularity > 75 and
+  WatchCount == 0 and
+  Added < monthsAgo(2)
+
+# Specific user backlog — tailor the username to your server
+family_backlog: |
+  requestedBy("family") and
+  watchProgressBy("family") < 30 and
+  Added < daysAgo(10)
+
+# Spot movies that one profile keeps rewatching
+multi_watch_favorites: |
+  watchCountBy("kids") >= 5 and
+  imdbRating() >= 7
+```
+
+#### Torrent & Hardlink Awareness
+*Coordinate cleanup with the hardlink workflow*
+
+```yaml
+# Skip anything still seeding to avoid breaking ratios
+protect_active_seeders: |
+  Movie.IsSeeding and
+  not hasTag("replace")
+
+# Highlight files that still need a hardlink pass
+needs_hardlink_fix: |
+  Movie.HardlinkCount <= 1 and
+  Added < monthsAgo(1)
+```
+
+Pair `needs_hardlink_fix` with `arrbiter hardlink --dry-run` to preview which titles the interactive hardlink command will walk you through.
 
 </details>
 

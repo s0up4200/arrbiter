@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/rs/zerolog"
 )
@@ -30,6 +31,7 @@ type historyOptions struct {
 	search string
 	user   string
 	limit  int
+	start  int
 }
 
 // Client provides access to the Tautulli API for retrieving Plex watch history.
@@ -147,6 +149,7 @@ func (c *Client) findMovieRecords(ctx context.Context, imdbID, title string) ([]
 		opts := historyOptions{
 			guid:  imdbGUIDPrefix + imdbID,
 			limit: defaultHistoryLimit,
+			start: 0,
 		}
 		history, err := c.getHistory(ctx, opts)
 		if err == nil && len(history.Response.Data.Data) > 0 {
@@ -159,6 +162,7 @@ func (c *Client) findMovieRecords(ctx context.Context, imdbID, title string) ([]
 		opts := historyOptions{
 			search: title,
 			limit:  defaultHistoryLimit,
+			start:  0,
 		}
 		history, err := c.getHistory(ctx, opts)
 		if err != nil {
@@ -181,9 +185,14 @@ func (c *Client) findMovieRecords(ctx context.Context, imdbID, title string) ([]
 
 // getHistory retrieves history from Tautulli API with the specified filters.
 func (c *Client) getHistory(ctx context.Context, opts historyOptions) (*HistoryResponse, error) {
+	limit := opts.limit
+	if limit <= 0 {
+		limit = defaultHistoryLimit
+	}
+
 	params := url.Values{
 		"media_type": {"movie"},
-		"length":     {strconv.Itoa(opts.limit)},
+		"length":     {strconv.Itoa(limit)},
 	}
 
 	if opts.guid != "" {
@@ -194,6 +203,9 @@ func (c *Client) getHistory(ctx context.Context, opts historyOptions) (*HistoryR
 	}
 	if opts.user != "" {
 		params.Set("user", opts.user)
+	}
+	if opts.start > 0 {
+		params.Set("start", strconv.Itoa(opts.start))
 	}
 
 	var history HistoryResponse
@@ -366,31 +378,119 @@ func (c *Client) BatchGetMovieWatchStatusWithUsers(ctx context.Context, movies [
 
 // historyIndices contains pre-built indices for efficient lookups.
 type historyIndices struct {
-	byIMDB  map[string][]HistoryRecord
-	byTitle map[string][]HistoryRecord
+	byIMDB               map[string][]HistoryRecord
+	byTMDB               map[string][]HistoryRecord
+	byTitle              map[string][]HistoryRecord
+	byFullTitle          map[string][]HistoryRecord
+	byNormalized         map[string][]HistoryRecord
+	byNormalizedNoDigits map[string][]HistoryRecord
 }
 
 // getAllHistory fetches all movie history records.
 func (c *Client) getAllHistory(ctx context.Context) (*HistoryResponse, error) {
-	opts := historyOptions{
-		limit: defaultHistoryLimit,
+	pageSize := defaultHistoryLimit
+	if pageSize <= 0 {
+		pageSize = 1000
 	}
-	return c.getHistory(ctx, opts)
+
+	var (
+		allRecords []HistoryRecord
+		start      int
+		result     string
+		message    string
+	)
+
+	for {
+		page, err := c.getHistory(ctx, historyOptions{
+			limit: pageSize,
+			start: start,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if result == "" {
+			result = page.Response.Result
+			message = page.Response.Message
+		}
+
+		records := page.Response.Data.Data
+		if len(records) == 0 {
+			break
+		}
+
+		allRecords = append(allRecords, records...)
+
+		if len(records) < pageSize {
+			break
+		}
+
+		start += pageSize
+	}
+
+	c.logger.Debug().
+		Int("records", len(allRecords)).
+		Msg("Aggregated Tautulli history records")
+
+	if result == "" {
+		result = "success"
+	}
+
+	return &HistoryResponse{
+		Response: Response{
+			Result:  result,
+			Message: message,
+			Data: HistoryData{
+				Data: allRecords,
+			},
+		},
+	}, nil
 }
 
 // buildHistoryIndices creates lookup maps for efficient record finding.
 func (c *Client) buildHistoryIndices(records []HistoryRecord) *historyIndices {
 	indices := &historyIndices{
-		byIMDB:  make(map[string][]HistoryRecord),
-		byTitle: make(map[string][]HistoryRecord),
+		byIMDB:               make(map[string][]HistoryRecord),
+		byTMDB:               make(map[string][]HistoryRecord),
+		byTitle:              make(map[string][]HistoryRecord),
+		byFullTitle:          make(map[string][]HistoryRecord),
+		byNormalized:         make(map[string][]HistoryRecord),
+		byNormalizedNoDigits: make(map[string][]HistoryRecord),
 	}
 
 	for _, record := range records {
 		if record.IMDbID != "" {
 			indices.byIMDB[record.IMDbID] = append(indices.byIMDB[record.IMDbID], record)
 		}
-		titleLower := strings.ToLower(record.Title)
-		indices.byTitle[titleLower] = append(indices.byTitle[titleLower], record)
+		if record.TMDbID != "" {
+			indices.byTMDB[record.TMDbID] = append(indices.byTMDB[record.TMDbID], record)
+		}
+
+		titleLower := strings.ToLower(strings.TrimSpace(record.Title))
+		if titleLower != "" {
+			indices.byTitle[titleLower] = append(indices.byTitle[titleLower], record)
+			if withDigits, withoutDigits := normalizedVariants(titleLower); withDigits != "" || withoutDigits != "" {
+				if withDigits != "" {
+					indices.byNormalized[withDigits] = append(indices.byNormalized[withDigits], record)
+				}
+				if withoutDigits != "" {
+					indices.byNormalizedNoDigits[withoutDigits] = append(indices.byNormalizedNoDigits[withoutDigits], record)
+				}
+			}
+		}
+
+		fullLower := strings.ToLower(strings.TrimSpace(record.FullTitle))
+		if fullLower != "" {
+			indices.byFullTitle[fullLower] = append(indices.byFullTitle[fullLower], record)
+			if withDigits, withoutDigits := normalizedVariants(fullLower); withDigits != "" || withoutDigits != "" {
+				if withDigits != "" {
+					indices.byNormalized[withDigits] = append(indices.byNormalized[withDigits], record)
+				}
+				if withoutDigits != "" {
+					indices.byNormalizedNoDigits[withoutDigits] = append(indices.byNormalizedNoDigits[withoutDigits], record)
+				}
+			}
+		}
 	}
 
 	return indices
@@ -405,13 +505,82 @@ func (c *Client) findRecordsInIndices(movie MovieIdentifier, indices *historyInd
 		}
 	}
 
-	// Check by title
-	if movie.Title != "" {
-		titleLower := strings.ToLower(movie.Title)
-		if records, ok := indices.byTitle[titleLower]; ok {
+	// Check by TMDB ID
+	if movie.TMDbID != 0 {
+		tmdbKey := strconv.FormatInt(movie.TMDbID, 10)
+		if records, ok := indices.byTMDB[tmdbKey]; ok {
+			return records
+		}
+	}
+
+	titleLower := strings.ToLower(strings.TrimSpace(movie.Title))
+	if titleLower == "" {
+		return nil
+	}
+
+	if records, ok := indices.byTitle[titleLower]; ok {
+		return records
+	}
+	if records, ok := indices.byFullTitle[titleLower]; ok {
+		return records
+	}
+
+	if records := lookupNormalizedRecords(titleLower, indices); records != nil {
+		return records
+	}
+
+	for key, records := range indices.byFullTitle {
+		if strings.HasPrefix(key, titleLower+" (") {
 			return records
 		}
 	}
 
 	return nil
+}
+
+func lookupNormalizedRecords(value string, indices *historyIndices) []HistoryRecord {
+	withDigits, withoutDigits := normalizedVariants(value)
+
+	if withDigits != "" {
+		if records, ok := indices.byNormalized[withDigits]; ok {
+			return records
+		}
+	}
+
+	if withoutDigits != "" {
+		if records, ok := indices.byNormalizedNoDigits[withoutDigits]; ok {
+			return records
+		}
+	}
+
+	return nil
+}
+
+func normalizedVariants(s string) (withDigits, withoutDigits string) {
+	if s == "" {
+		return "", ""
+	}
+
+	withDigits = normalizeTitleWithDigits(s, false)
+	withoutDigits = normalizeTitleWithDigits(s, true)
+	return
+}
+
+func normalizeTitleWithDigits(s string, removeDigits bool) string {
+	if s == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case unicode.IsLetter(r):
+			b.WriteRune(r)
+		case unicode.IsNumber(r) && !removeDigits:
+			b.WriteRune(r)
+		default:
+			// skip punctuation and digits when requested
+		}
+	}
+	return b.String()
 }
