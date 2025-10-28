@@ -232,6 +232,7 @@ func createRuntimeEnvironment(movie radarr.MovieInfo) map[string]any {
 	env["Year"] = movie.Year
 	env["Tags"] = movie.TagNames
 	env["Added"] = movie.Added
+	env["MonitoredSince"] = movie.MonitoredSince
 	env["FileImported"] = movie.FileImported
 	env["Watched"] = movie.Watched
 	env["WatchCount"] = movie.WatchCount

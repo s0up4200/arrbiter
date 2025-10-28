@@ -260,10 +260,7 @@ Skip confirmation when deleting:
 arrbiter delete --no-confirm
 ```
 
-Keep files on disk when deleting from Radarr:
-```bash
-arrbiter delete --delete-files=false
-```
+All deletions remove the associated movie files from disk, so lean on `--dry-run` when you want to double-check the impact first.
 
 ## Filter Expression Syntax
 
@@ -289,10 +286,14 @@ WatchProgress  # float64 - Maximum watch progress percentage across all users
 > `Watched` flips to true once someone crosses the configured watch threshold (default 85%).  
 > `WatchCount` increments for each play session, even if nobody finished the movie. Use both when you need “never truly watched” *and* “never even started.”
 
+> **Availability vs. Monitoring**  
+> `Added` reflects when the movie's files became available in Radarr. Use `MonitoredSince` if you need the original date the title was first added or monitored.
+
 ```yaml
 
 # Date Properties
-Added          # time.Time - When movie was added to Radarr
+Added          # time.Time - When the movie's files became available (falls back to monitored date)
+MonitoredSince # time.Time - When the title was first added/monitored in Radarr
 FileImported   # time.Time - When the file was imported
 LastWatched    # time.Time - When movie was last watched by any user
 
@@ -635,7 +636,7 @@ Pair `needs_hardlink_fix` with `arrbiter hardlink --dry-run` to preview which ti
 2. **Confirmation Prompts**: Asks for confirmation before deleting (can be disabled)
 3. **Watched Movie Warnings**: Warns when attempting to delete watched movies
 4. **Detailed Logging**: Structured logging with adjustable levels
-5. **File Deletion Control**: Choose whether to delete files from disk
+5. **Automatic File Cleanup**: Movie files are always removed alongside the Radarr entry to avoid orphaned data
 
 ## Command Line Options
 
@@ -648,8 +649,8 @@ No additional options - processes all filters from config
 
 ### Delete Command
 - `--no-confirm`: Skip confirmation prompt
-- `--delete-files`: Also delete movie files from disk (default: true)
-- `--ignore-watched`: Delete movies even if they have been watched
+
+Delete operations always remove on-disk media in addition to the Radarr entries.
 
 ### Import Command
 The import command allows you to manually import movie files into Radarr. This is particularly useful for:
@@ -700,7 +701,6 @@ Add Tautulli settings to your `config.yaml` as shown in the [Configuration](#con
 1. The tool queries Tautulli for all movie watch history
 2. Movies are matched by IMDB ID or title
 3. A movie is considered "watched" if viewed past the `min_watch_percent` threshold
-4. When deleting, watched movies trigger a warning unless `--ignore-watched` is used
 
 ### User-Specific Filtering
 

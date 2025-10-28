@@ -76,7 +76,7 @@ func (c *Client) ProcessMovieFiles(ctx context.Context, movies []*radarr.Movie) 
 }
 
 // BatchDeleteMovies deletes movies in batches with proper error aggregation
-func (c *Client) BatchDeleteMovies(ctx context.Context, movies []MovieInfo, deleteFiles bool) BatchDeleteResult {
+func (c *Client) BatchDeleteMovies(ctx context.Context, movies []MovieInfo) BatchDeleteResult {
 	result := BatchDeleteResult{
 		Requested: len(movies),
 	}
@@ -97,7 +97,7 @@ func (c *Client) BatchDeleteMovies(ctx context.Context, movies []MovieInfo, dele
 		currentMovie := movie
 
 		g.Go(func() error {
-			err := c.DeleteMovie(ctx, currentMovie.ID, deleteFiles)
+			err := c.DeleteMovie(ctx, currentMovie.ID)
 			if err != nil {
 				errorChan <- DeleteError{
 					MovieID:    currentMovie.ID,

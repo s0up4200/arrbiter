@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	
+
 	"golift.io/starr/radarr"
 )
 
@@ -23,7 +23,7 @@ func (f *ConsoleFormatter) FormatMovieList(movies []MovieInfo, options FormatOpt
 	}
 
 	var sb strings.Builder
-	
+
 	// Header
 	sb.WriteString("\nMovie")
 	if len(movies) != 1 {
@@ -35,12 +35,12 @@ func (f *ConsoleFormatter) FormatMovieList(movies []MovieInfo, options FormatOpt
 	for i, movie := range movies {
 		isLast := i == len(movies)-1
 		f.formatMovie(&sb, movie, isLast, options)
-		
+
 		if !isLast {
 			sb.WriteString("\u2502\n")
 		}
 	}
-	
+
 	sb.WriteString("\n")
 	return sb.String()
 }
@@ -92,11 +92,19 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 		}
 
 		// Dates
-		dateInfo := fmt.Sprintf("Added: %s", movie.Added.Format("2006-01-02"))
-		if !movie.FileImported.IsZero() {
-			dateInfo += fmt.Sprintf(" | Imported: %s", movie.FileImported.Format("2006-01-02"))
+		var dateParts []string
+		if !movie.Added.IsZero() {
+			dateParts = append(dateParts, fmt.Sprintf("Available: %s", movie.Added.Format("2006-01-02")))
 		}
-		fmt.Fprintf(&sb, "%s%s\n", indent, dateInfo)
+		if !movie.FileImported.IsZero() && !movie.FileImported.Equal(movie.Added) {
+			dateParts = append(dateParts, fmt.Sprintf("Imported: %s", movie.FileImported.Format("2006-01-02")))
+		}
+		if !movie.MonitoredSince.IsZero() && !movie.MonitoredSince.Equal(movie.Added) {
+			dateParts = append(dateParts, fmt.Sprintf("Monitored: %s", movie.MonitoredSince.Format("2006-01-02")))
+		}
+		if len(dateParts) > 0 {
+			fmt.Fprintf(&sb, "%s%s\n", indent, strings.Join(dateParts, " | "))
+		}
 
 		// Watch info
 		if movie.WatchCount > 0 {
@@ -123,14 +131,8 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 			sb.WriteString("\u2502\n")
 		}
 	}
-	
-	sb.WriteString("\n")
 
-	// Warning for watched movies
-	if watchedCount > 0 {
-		fmt.Fprintf(&sb, "\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(movies))
-		sb.WriteString("Use --ignore-watched flag to bypass this warning.\n")
-	}
+	sb.WriteString("\n")
 
 	return sb.String()
 }
@@ -160,10 +162,10 @@ func (f *ConsoleFormatter) FormatUpgradeCandidates(candidates []UpgradeResult) s
 
 		// Current formats and score
 		if len(candidate.CurrentFormats) > 0 {
-			fmt.Fprintf(&sb, "%sCurrent Formats: %v (Score: %d)\n", 
+			fmt.Fprintf(&sb, "%sCurrent Formats: %v (Score: %d)\n",
 				indent, candidate.CurrentFormats, candidate.CurrentFormatScore)
 		} else {
-			fmt.Fprintf(&sb, "%sCurrent Formats: None (Score: %d)\n", 
+			fmt.Fprintf(&sb, "%sCurrent Formats: None (Score: %d)\n",
 				indent, candidate.CurrentFormatScore)
 		}
 
@@ -193,7 +195,7 @@ func (f *ConsoleFormatter) FormatUpgradeCandidates(candidates []UpgradeResult) s
 			sb.WriteString("\u2502\n")
 		}
 	}
-	
+
 	sb.WriteString("\n")
 	return sb.String()
 }
@@ -201,33 +203,33 @@ func (f *ConsoleFormatter) FormatUpgradeCandidates(candidates []UpgradeResult) s
 // PrintImportableItems prints importable items in a formatted way
 func (f *ConsoleFormatter) PrintImportableItems(items []*radarr.ManualImportOutput) {
 	fmt.Printf("\nFound %d importable item(s):\n\n", len(items))
-	
+
 	for i, item := range items {
 		isLast := i == len(items)-1
 		prefix := "\u251C\u2500 "
 		indent := "\u2502  "
-		
+
 		if isLast {
 			prefix = "\u2514\u2500 "
 			indent = "   "
 		}
-		
+
 		// File name and size
 		fmt.Printf("%s%s (%.2f MB)\n", prefix, filepath.Base(item.Path), float64(item.Size)/1024/1024)
-		
+
 		// Full path
 		fmt.Printf("%sPath: %s\n", indent, item.Path)
-		
+
 		// Movie info
 		if item.Movie != nil {
 			fmt.Printf("%sMovie: %s (%d)\n", indent, item.Movie.Title, item.Movie.Year)
 		}
-		
+
 		// Quality
 		if item.Quality != nil && item.Quality.Quality != nil {
 			fmt.Printf("%sQuality: %s\n", indent, item.Quality.Quality.Name)
 		}
-		
+
 		// Rejections
 		if len(item.Rejections) > 0 {
 			fmt.Printf("%sRejections:\n", indent)
@@ -235,12 +237,12 @@ func (f *ConsoleFormatter) PrintImportableItems(items []*radarr.ManualImportOutp
 				fmt.Printf("%s  - %s: %s\n", indent, rejection.Type, rejection.Reason)
 			}
 		}
-		
+
 		if !isLast {
 			fmt.Println("\u2502")
 		}
 	}
-	
+
 	fmt.Println()
 }
 
@@ -277,7 +279,7 @@ func (f *ConsoleFormatter) formatMovie(sb *strings.Builder, movie MovieInfo, isL
 			watchInfo += fmt.Sprintf(" (last: %s)", movie.LastWatched.Format("2006-01-02"))
 		}
 		fmt.Fprintf(sb, "%s%s\n", indent, watchInfo)
-		
+
 		// Per-user watch data
 		if len(movie.UserWatchData) > 0 {
 			for username, userData := range movie.UserWatchData {
@@ -339,13 +341,13 @@ func (f *ConsoleFormatter) FormatHardlinkResults(movies []MovieInfo) string {
 			if isLast {
 				prefix = "\u2570"
 			}
-			
+
 			fmt.Fprintf(&sb, "%s\u2500\u2500 %s (%d)", prefix, movie.Title, movie.Year)
 			if movie.IsSeeding {
 				sb.WriteString(" [SEEDING]")
 			}
 			sb.WriteString("\n")
-			
+
 			if !isLast {
 				sb.WriteString("\u2502\n")
 			}
@@ -362,9 +364,9 @@ func (f *ConsoleFormatter) FormatHardlinkResults(movies []MovieInfo) string {
 			if isLast {
 				prefix = "\u2570"
 			}
-			
+
 			fmt.Fprintf(&sb, "%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
-			
+
 			if !isLast {
 				sb.WriteString("\u2502\n")
 			}

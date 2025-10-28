@@ -23,7 +23,6 @@ type SearchOptions struct {
 // DeleteOptions contains options for deleting movies
 type DeleteOptions struct {
 	DryRun        bool
-	DeleteFiles   bool
 	ConfirmDelete bool
 }
 
@@ -152,7 +151,6 @@ func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo
 	return results, nil
 }
 
-
 // DeleteMovies deletes movies matching the filter
 func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts DeleteOptions) error {
 	if len(movies) == 0 {
@@ -175,7 +173,7 @@ func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts 
 	}
 
 	// Use concurrent batch deletion
-	result := o.client.BatchDeleteMovies(ctx, movies, opts.DeleteFiles)
+	result := o.client.BatchDeleteMovies(ctx, movies)
 
 	o.logger.Info().
 		Int("deleted", len(result.Successful)).
@@ -197,7 +195,6 @@ func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts 
 
 	return nil
 }
-
 
 // confirmDeletion prompts the user for confirmation
 func (o *Operations) confirmDeletion(count int) bool {
@@ -323,4 +320,3 @@ func convertCustomFormats(outputs []*radarr.CustomFormatOutput) []*radarr.Custom
 	}
 	return inputs
 }
-

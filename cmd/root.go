@@ -31,7 +31,6 @@ var (
 	// Command flags
 	dryRun        bool
 	noConfirm     bool
-	deleteFiles   bool
 	ignoreWatched bool
 )
 
@@ -258,11 +257,19 @@ func runList(cmd *cobra.Command, args []string) error {
 					fmt.Printf("%sTags: %s\n", indent, strings.Join(movie.TagNames, ", "))
 				}
 
-				dateInfo := fmt.Sprintf("Added: %s", movie.Added.Format("2006-01-02"))
-				if !movie.FileImported.IsZero() {
-					dateInfo += fmt.Sprintf(" | Imported: %s", movie.FileImported.Format("2006-01-02"))
+				var dateParts []string
+				if !movie.Added.IsZero() {
+					dateParts = append(dateParts, fmt.Sprintf("Available: %s", movie.Added.Format("2006-01-02")))
 				}
-				fmt.Printf("%s%s\n", indent, dateInfo)
+				if !movie.FileImported.IsZero() && !movie.FileImported.Equal(movie.Added) {
+					dateParts = append(dateParts, fmt.Sprintf("Imported: %s", movie.FileImported.Format("2006-01-02")))
+				}
+				if !movie.MonitoredSince.IsZero() && !movie.MonitoredSince.Equal(movie.Added) {
+					dateParts = append(dateParts, fmt.Sprintf("Monitored: %s", movie.MonitoredSince.Format("2006-01-02")))
+				}
+				if len(dateParts) > 0 {
+					fmt.Printf("%s%s\n", indent, strings.Join(dateParts, " | "))
+				}
 
 				if movie.WatchCount > 0 {
 					watchInfo := fmt.Sprintf("Watched %dx", movie.WatchCount)
@@ -302,8 +309,6 @@ var deleteCmd = &cobra.Command{
 
 func init() {
 	deleteCmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "skip confirmation prompt")
-	deleteCmd.Flags().BoolVar(&deleteFiles, "delete-files", true, "also delete movie files from disk")
-	deleteCmd.Flags().BoolVar(&ignoreWatched, "ignore-watched", false, "delete movies even if they have been watched")
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
@@ -395,22 +400,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 				watchedCount++
 			}
 		}
-		if watchedCount > 0 && cfg.Safety.ConfirmDelete && !noConfirm {
-			fmt.Printf("\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(moviesToDelete))
-			fmt.Printf("Are you sure you want to continue? Use --ignore-watched to bypass this check. [y/N]: ")
-			var response string
-			fmt.Scanln(&response)
-			if strings.ToLower(strings.TrimSpace(response)) != "y" {
-				logger.Info().Msg("Deletion cancelled due to watched movies")
-				return nil
-			}
-		}
 	}
 
 	// Delete movies
 	deleteOpts := radarr.DeleteOptions{
 		DryRun:        cfg.Safety.DryRun,
-		DeleteFiles:   deleteFiles,
 		ConfirmDelete: cfg.Safety.ConfirmDelete && !noConfirm,
 	}
 

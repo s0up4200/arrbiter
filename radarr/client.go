@@ -90,14 +90,14 @@ func (c *Client) GetTags(ctx context.Context) ([]*starr.Tag, error) {
 	return tags, nil
 }
 
-// DeleteMovie deletes a movie from Radarr
-func (c *Client) DeleteMovie(ctx context.Context, movieID int64, deleteFiles bool) error {
-	err := c.api.DeleteMovieContext(ctx, movieID, deleteFiles, false)
+// DeleteMovie deletes a movie and its files from Radarr
+func (c *Client) DeleteMovie(ctx context.Context, movieID int64) error {
+	err := c.api.DeleteMovieContext(ctx, movieID, true, false)
 	if err != nil {
 		return fmt.Errorf("failed to delete movie ID %d: %w", movieID, err)
 	}
 
-	c.logger.Info().Int64("movie_id", movieID).Bool("delete_files", deleteFiles).
+	c.logger.Info().Int64("movie_id", movieID).
 		Msg("Successfully deleted movie")
 	return nil
 }
@@ -179,18 +179,19 @@ func (c *Client) ProcessManualImport(ctx context.Context, items []*radarr.Manual
 
 // MovieInfo contains relevant movie information for filtering and display
 type MovieInfo struct {
-	ID           int64
-	Title        string
-	Year         int
-	TMDBID       int64
-	IMDBID       string
-	Path         string
-	Tags         []int
-	TagNames     []string
-	Added        time.Time
-	MovieFile    *radarr.MovieFile
-	HasFile      bool
-	FileImported time.Time
+	ID             int64
+	Title          string
+	Year           int
+	TMDBID         int64
+	IMDBID         string
+	Path           string
+	Tags           []int
+	TagNames       []string
+	Added          time.Time
+	MonitoredSince time.Time
+	MovieFile      *radarr.MovieFile
+	HasFile        bool
+	FileImported   time.Time
 	// Watch status fields (aggregate across all users)
 	Watched       bool
 	WatchCount    int
@@ -231,19 +232,20 @@ type UserWatchInfo struct {
 // GetMovieInfo converts a Radarr movie to our MovieInfo struct
 func (c *Client) GetMovieInfo(movie *radarr.Movie, tags []*starr.Tag) MovieInfo {
 	info := MovieInfo{
-		ID:            movie.ID,
-		Title:         movie.Title,
-		Year:          movie.Year,
-		TMDBID:        movie.TmdbID,
-		IMDBID:        movie.ImdbID,
-		Path:          movie.Path,
-		Tags:          movie.Tags,
-		TagNames:      make([]string, 0),
-		Added:         movie.Added,
-		HasFile:       movie.HasFile,
-		UserWatchData: make(map[string]*UserWatchInfo),
-		Ratings:       make(map[string]float64),
-		Popularity:    movie.Popularity,
+		ID:             movie.ID,
+		Title:          movie.Title,
+		Year:           movie.Year,
+		TMDBID:         movie.TmdbID,
+		IMDBID:         movie.ImdbID,
+		Path:           movie.Path,
+		Tags:           movie.Tags,
+		TagNames:       make([]string, 0),
+		Added:          movie.Added,
+		MonitoredSince: movie.Added,
+		HasFile:        movie.HasFile,
+		UserWatchData:  make(map[string]*UserWatchInfo),
+		Ratings:        make(map[string]float64),
+		Popularity:     movie.Popularity,
 	}
 
 	// Map tag IDs to names
@@ -263,6 +265,7 @@ func (c *Client) GetMovieInfo(movie *radarr.Movie, tags []*starr.Tag) MovieInfo 
 		info.MovieFile = movie.MovieFile
 		if !movie.MovieFile.DateAdded.IsZero() {
 			info.FileImported = movie.MovieFile.DateAdded
+			info.Added = movie.MovieFile.DateAdded
 		}
 	}
 

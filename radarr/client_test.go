@@ -12,10 +12,11 @@ import (
 
 // mockRadarrAPI implements RadarrAPI for testing
 type mockRadarrAPI struct {
-	movies        []*radarr.Movie
-	tags          []*starr.Tag
-	customFormats []*radarr.CustomFormatOutput
-	movieFiles    map[int64]*radarr.MovieFile
+	movies          []*radarr.Movie
+	tags            []*starr.Tag
+	customFormats   []*radarr.CustomFormatOutput
+	movieFiles      map[int64]*radarr.MovieFile
+	deleteFileFlags []bool
 
 	// Track calls for verification
 	getMovieCalls int
@@ -41,6 +42,7 @@ func (m *mockRadarrAPI) UpdateMovieContext(ctx context.Context, movieID int64, m
 }
 
 func (m *mockRadarrAPI) DeleteMovieContext(ctx context.Context, movieID int64, deleteFiles, addImportExclusion bool) error {
+	m.deleteFileFlags = append(m.deleteFileFlags, deleteFiles)
 	return nil
 }
 
@@ -172,18 +174,19 @@ func TestClient_GetMovieInfo(t *testing.T) {
 				{ID: 2, Label: "adventure"},
 			},
 			expected: MovieInfo{
-				ID:           1,
-				Title:        "Test Movie",
-				Year:         2023,
-				TMDBID:       12345,
-				IMDBID:       "tt1234567",
-				Path:         "/movies/test",
-				Tags:         []int{1, 2},
-				TagNames:     []string{"action", "adventure"},
-				Added:        testTime,
-				HasFile:      true,
-				FileImported: testTime,
-				Popularity:   8.5,
+				ID:             1,
+				Title:          "Test Movie",
+				Year:           2023,
+				TMDBID:         12345,
+				IMDBID:         "tt1234567",
+				Path:           "/movies/test",
+				Tags:           []int{1, 2},
+				TagNames:       []string{"action", "adventure"},
+				Added:          testTime,
+				MonitoredSince: testTime,
+				HasFile:        true,
+				FileImported:   testTime,
+				Popularity:     8.5,
 			},
 		},
 		{
@@ -199,14 +202,41 @@ func TestClient_GetMovieInfo(t *testing.T) {
 			},
 			tags: []*starr.Tag{},
 			expected: MovieInfo{
-				ID:       2,
-				Title:    "Rated Movie",
-				Year:     2023,
-				TagNames: []string{},
+				ID:             2,
+				Title:          "Rated Movie",
+				Year:           2023,
+				TagNames:       []string{},
+				MonitoredSince: time.Time{},
 				Ratings: map[string]float64{
 					"imdb": 7.5,
 					"tmdb": 8.0,
 				},
+			},
+		},
+		{
+			name: "Separates monitored and availability dates",
+			movie: &radarr.Movie{
+				ID:      3,
+				Title:   "Delayed Grab",
+				Year:    2022,
+				Added:   testTime.Add(-48 * time.Hour),
+				HasFile: true,
+				MovieFile: &radarr.MovieFile{
+					ID:        11,
+					DateAdded: testTime,
+				},
+			},
+			tags: []*starr.Tag{},
+			expected: MovieInfo{
+				ID:             3,
+				Title:          "Delayed Grab",
+				Year:           2022,
+				Added:          testTime,
+				MonitoredSince: testTime.Add(-48 * time.Hour),
+				HasFile:        true,
+				FileImported:   testTime,
+				TagNames:       []string{},
+				Ratings:        map[string]float64{},
 			},
 		},
 	}
@@ -227,6 +257,16 @@ func TestClient_GetMovieInfo(t *testing.T) {
 			}
 			if len(result.TagNames) != len(tt.expected.TagNames) {
 				t.Errorf("TagNames length mismatch: got %d, want %d", len(result.TagNames), len(tt.expected.TagNames))
+			}
+
+			if !result.Added.Equal(tt.expected.Added) {
+				t.Errorf("Added mismatch: got %v, want %v", result.Added, tt.expected.Added)
+			}
+			if !result.MonitoredSince.Equal(tt.expected.MonitoredSince) {
+				t.Errorf("MonitoredSince mismatch: got %v, want %v", result.MonitoredSince, tt.expected.MonitoredSince)
+			}
+			if !result.FileImported.Equal(tt.expected.FileImported) {
+				t.Errorf("FileImported mismatch: got %v, want %v", result.FileImported, tt.expected.FileImported)
 			}
 
 			// Check ratings
@@ -254,7 +294,7 @@ func TestBatchDeleteMovies(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result := client.BatchDeleteMovies(ctx, movies, true)
+	result := client.BatchDeleteMovies(ctx, movies)
 
 	if result.Requested != 3 {
 		t.Errorf("expected 3 requested deletions, got %d", result.Requested)
@@ -264,5 +304,13 @@ func TestBatchDeleteMovies(t *testing.T) {
 	}
 	if len(result.Failed) != 0 {
 		t.Errorf("expected 0 failed deletions, got %d", len(result.Failed))
+	}
+	if len(mockAPI.deleteFileFlags) != 3 {
+		t.Fatalf("expected deleteFiles flag captured 3 times, got %d", len(mockAPI.deleteFileFlags))
+	}
+	for _, flag := range mockAPI.deleteFileFlags {
+		if !flag {
+			t.Error("expected deleteFiles flag to always be true")
+		}
 	}
 }
