@@ -86,7 +86,7 @@ func NewClient(baseURL, apiKey string, logger zerolog.Logger, opts ...ClientOpti
 	// Test the connection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	if err := client.TestConnection(ctx); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrNoConnection, err)
 	}
@@ -106,7 +106,7 @@ func (c *Client) buildURL(endpoint string, params url.Values) string {
 // newRequest creates a new HTTP request with authentication
 func (c *Client) newRequest(ctx context.Context, method, endpoint string, params url.Values) (*http.Request, error) {
 	url := c.buildURL(endpoint, params)
-	
+
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -125,11 +125,6 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, params 
 	if err != nil {
 		return nil, err
 	}
-
-	c.logger.Debug().
-		Str("method", method).
-		Str("endpoint", endpoint).
-		Msg("Making Overseerr API request")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -199,16 +194,14 @@ func (c *Client) TestConnection(ctx context.Context) error {
 		ID          int    `json:"id"`
 		DisplayName string `json:"displayName"`
 	}
-	
+
 	if err := c.get(ctx, "/auth/me", nil, &user); err != nil {
 		return err
 	}
 
 	c.logger.Debug().
-		Int("user_id", user.ID).
-		Str("user_name", user.DisplayName).
 		Msg("Successfully connected to Overseerr")
-	
+
 	return nil
 }
 
@@ -267,7 +260,7 @@ func (c *Client) FetchAll(ctx context.Context) ([]MediaRequest, error) {
 		if !response.HasMorePages() {
 			break
 		}
-		
+
 		page++
 	}
 
