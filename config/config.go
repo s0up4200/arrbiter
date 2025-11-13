@@ -169,6 +169,7 @@ overseerr:
 
 qbittorrent:
   url: http://localhost:8080
+  # username/password not needed if you go through qui
   username: admin
   password: adminpass
 

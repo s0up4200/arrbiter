@@ -31,7 +31,6 @@ var (
 	// Command flags
 	dryRun        bool
 	noConfirm     bool
-	deleteFiles   bool
 	ignoreWatched bool
 )
 
@@ -114,8 +113,8 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create qBittorrent client if URL and username are provided
-	if cfg.QBittorrent.URL != "" && cfg.QBittorrent.Username != "" {
+	// Create qBittorrent client if URL is provided
+	if cfg.QBittorrent.URL != "" {
 		qbittorrentClient, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to create qBittorrent client, continuing without torrent integration")
@@ -258,11 +257,19 @@ func runList(cmd *cobra.Command, args []string) error {
 					fmt.Printf("%sTags: %s\n", indent, strings.Join(movie.TagNames, ", "))
 				}
 
-				dateInfo := fmt.Sprintf("Added: %s", movie.Added.Format("2006-01-02"))
-				if !movie.FileImported.IsZero() {
-					dateInfo += fmt.Sprintf(" | Imported: %s", movie.FileImported.Format("2006-01-02"))
+				var dateParts []string
+				if !movie.Added.IsZero() {
+					dateParts = append(dateParts, fmt.Sprintf("Available: %s", movie.Added.Format("2006-01-02")))
 				}
-				fmt.Printf("%s%s\n", indent, dateInfo)
+				if !movie.FileImported.IsZero() && !movie.FileImported.Equal(movie.Added) {
+					dateParts = append(dateParts, fmt.Sprintf("Imported: %s", movie.FileImported.Format("2006-01-02")))
+				}
+				if !movie.MonitoredSince.IsZero() && !movie.MonitoredSince.Equal(movie.Added) {
+					dateParts = append(dateParts, fmt.Sprintf("Monitored: %s", movie.MonitoredSince.Format("2006-01-02")))
+				}
+				if len(dateParts) > 0 {
+					fmt.Printf("%s%s\n", indent, strings.Join(dateParts, " | "))
+				}
 
 				if movie.WatchCount > 0 {
 					watchInfo := fmt.Sprintf("Watched %dx", movie.WatchCount)
@@ -270,6 +277,15 @@ func runList(cmd *cobra.Command, args []string) error {
 						watchInfo += fmt.Sprintf(" (last: %s)", movie.LastWatched.Format("2006-01-02"))
 					}
 					fmt.Printf("%s%s\n", indent, watchInfo)
+				}
+
+				// Show request info if available
+				if movie.IsRequested && movie.RequestedBy != "" {
+					requestInfo := fmt.Sprintf("Requested by: %s", movie.RequestedBy)
+					if !movie.RequestDate.IsZero() {
+						requestInfo += fmt.Sprintf(" on %s", movie.RequestDate.Format("2006-01-02"))
+					}
+					fmt.Printf("%s%s\n", indent, requestInfo)
 				}
 			}
 			if i < len(movies)-1 && cfg.Safety.ShowDetails {
@@ -293,8 +309,6 @@ var deleteCmd = &cobra.Command{
 
 func init() {
 	deleteCmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "skip confirmation prompt")
-	deleteCmd.Flags().BoolVar(&deleteFiles, "delete-files", true, "also delete movie files from disk")
-	deleteCmd.Flags().BoolVar(&ignoreWatched, "ignore-watched", false, "delete movies even if they have been watched")
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
@@ -386,22 +400,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 				watchedCount++
 			}
 		}
-		if watchedCount > 0 && cfg.Safety.ConfirmDelete && !noConfirm {
-			fmt.Printf("\n⚠️  WARNING: %d of %d movies have been watched!\n", watchedCount, len(moviesToDelete))
-			fmt.Printf("Are you sure you want to continue? Use --ignore-watched to bypass this check. [y/N]: ")
-			var response string
-			fmt.Scanln(&response)
-			if strings.ToLower(strings.TrimSpace(response)) != "y" {
-				logger.Info().Msg("Deletion cancelled due to watched movies")
-				return nil
-			}
-		}
 	}
 
 	// Delete movies
 	deleteOpts := radarr.DeleteOptions{
 		DryRun:        cfg.Safety.DryRun,
-		DeleteFiles:   deleteFiles,
 		ConfirmDelete: cfg.Safety.ConfirmDelete && !noConfirm,
 	}
 
@@ -439,14 +442,18 @@ func runTest(cmd *cobra.Command, args []string) error {
 	}
 
 	// Test qBittorrent if configured
-	if cfg.QBittorrent.URL != "" && cfg.QBittorrent.Username != "" {
+	if cfg.QBittorrent.URL != "" {
 		logger.Info().Str("url", cfg.QBittorrent.URL).Msg("Testing qBittorrent connection")
 		// Try to create a client to test the connection
-		_, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
+		client, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
 		if err != nil {
 			logger.Error().Err(err).Msg("✗ qBittorrent connection failed")
 		} else {
-			logger.Info().Msg("✓ qBittorrent connection successful")
+			if _, err := client.GetAllTorrents(context.Background()); err != nil {
+				logger.Warn().Err(err).Msg("qBittorrent reachable but API call failed (check authentication)")
+			} else {
+				logger.Info().Msg("✓ qBittorrent connection successful")
+			}
 		}
 	} else {
 		logger.Info().Msg("qBittorrent integration: Not configured")

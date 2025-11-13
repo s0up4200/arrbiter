@@ -260,10 +260,7 @@ Skip confirmation when deleting:
 arrbiter delete --no-confirm
 ```
 
-Keep files on disk when deleting from Radarr:
-```bash
-arrbiter delete --delete-files=false
-```
+All deletions remove the associated movie files from disk, so lean on `--dry-run` when you want to double-check the impact first.
 
 ## Filter Expression Syntax
 
@@ -280,12 +277,23 @@ IMDBID         # string - IMDb identifier (e.g., "tt1234567")
 TMDBID         # int64 - The Movie Database ID
 
 # Status Properties
-Watched        # bool - Whether movie has been watched by any user
-WatchCount     # int - Total number of times watched by all users
+Watched        # bool - Whether any play met the watched threshold (min_watch_percent or Plex flag)
+WatchCount     # int - Total number of play sessions recorded (counts partial/abandoned plays too)
 WatchProgress  # float64 - Maximum watch progress percentage across all users
+```
+
+> **Watched vs. WatchCount**  
+> `Watched` flips to true once someone crosses the configured watch threshold (default 85%).  
+> `WatchCount` increments for each play session, even if nobody finished the movie. Use both when you need “never truly watched” *and* “never even started.”
+
+> **Availability vs. Monitoring**  
+> `Added` reflects when the movie's files became available in Radarr. Use `MonitoredSince` if you need the original date the title was first added or monitored.
+
+```yaml
 
 # Date Properties
-Added          # time.Time - When movie was added to Radarr
+Added          # time.Time - When the movie's files became available (falls back to monitored date)
+MonitoredSince # time.Time - When the title was first added/monitored in Radarr
 FileImported   # time.Time - When the file was imported
 LastWatched    # time.Time - When movie was last watched by any user
 
@@ -563,6 +571,61 @@ aggressive_cleanup: |
 - Using `!notWatchedByRequester()` matches movies that either weren't requested OR were requested and watched
 - Using `!watchedByRequester()` matches movies that either weren't requested OR were requested but not watched
 
+#### Request Workflow Monitoring
+*Keep tabs on requests that need manual follow-up*
+
+```yaml
+# Flag requests that are still pending after two weeks
+request_pending_over_2_weeks: |
+  requestStatus("PENDING") and
+  requestedBefore(daysAgo(14))
+
+# Requests approved by an admin that the requester still hasn't watched
+approved_but_unwatched: |
+  approvedBy("admin") and
+  not watchedByRequester() and
+  Added < daysAgo(21)
+```
+
+#### Engagement Signals
+*Surface titles people asked for but never actually watched*
+
+```yaml
+# Popular additions nobody pressed play on
+popular_but_unwatched: |
+  Popularity > 75 and
+  WatchCount == 0 and
+  Added < monthsAgo(2)
+
+# Specific user backlog — tailor the username to your server
+family_backlog: |
+  requestedBy("family") and
+  watchProgressBy("family") < 30 and
+  Added < daysAgo(10)
+
+# Spot movies that one profile keeps rewatching
+multi_watch_favorites: |
+  watchCountBy("kids") >= 5 and
+  imdbRating() >= 7
+```
+
+#### Torrent & Hardlink Awareness
+*Coordinate cleanup with the hardlink workflow*
+
+```yaml
+# Skip anything still seeding to avoid breaking ratios
+protect_active_seeders: |
+  Movie.IsSeeding and
+  not hasTag("replace")
+
+# Highlight files that still need a hardlink pass
+needs_hardlink_fix: |
+  Movie.HardlinkCount <= 1 and
+  Added < monthsAgo(1)
+```
+
+Pair `needs_hardlink_fix` with `arrbiter hardlink --dry-run` to preview which titles the interactive hardlink command will walk you through.
+
 </details>
 
 ---
@@ -573,7 +636,7 @@ aggressive_cleanup: |
 2. **Confirmation Prompts**: Asks for confirmation before deleting (can be disabled)
 3. **Watched Movie Warnings**: Warns when attempting to delete watched movies
 4. **Detailed Logging**: Structured logging with adjustable levels
-5. **File Deletion Control**: Choose whether to delete files from disk
+5. **Automatic File Cleanup**: Movie files are always removed alongside the Radarr entry to avoid orphaned data
 
 ## Command Line Options
 
@@ -586,8 +649,8 @@ No additional options - processes all filters from config
 
 ### Delete Command
 - `--no-confirm`: Skip confirmation prompt
-- `--delete-files`: Also delete movie files from disk (default: true)
-- `--ignore-watched`: Delete movies even if they have been watched
+
+Delete operations always remove on-disk media in addition to the Radarr entries.
 
 ### Import Command
 The import command allows you to manually import movie files into Radarr. This is particularly useful for:
@@ -638,7 +701,6 @@ Add Tautulli settings to your `config.yaml` as shown in the [Configuration](#con
 1. The tool queries Tautulli for all movie watch history
 2. Movies are matched by IMDB ID or title
 3. A movie is considered "watched" if viewed past the `min_watch_percent` threshold
-4. When deleting, watched movies trigger a warning unless `--ignore-watched` is used
 
 ### User-Specific Filtering
 
@@ -739,11 +801,12 @@ The `hardlink` command helps ensure proper hardlinking between Radarr and qBitto
 - **Hardlink Detection**: Scans your Radarr library for movies that don't have hardlinks
 - **qBittorrent Integration**: Checks if non-hardlinked movies exist in qBittorrent
 - **Smart Re-importing**: Re-imports movies from qBittorrent to create proper hardlinks
+- **Alternate Torrents**: Suggests other qBittorrent torrents when the original release is missing
 - **Cleanup Options**: Deletes and re-searches for movies not found in qBittorrent
 
 ### Configuration
 
-Add qBittorrent settings to your `config.yaml` as shown in the [Configuration](#configuration) section above.
+Add qBittorrent settings to your `config.yaml` as shown in the [Configuration](#configuration) section above. If you're using qui as a transparent proxy, you can omit the username/password and arrbiter will skip the login step.
 
 ### Usage
 
@@ -774,14 +837,33 @@ Status: ✗ Not found in qBittorrent
 
 → Delete file and search for new version? [y/n/q]: n
 ⊘ Skipped
+
+[3/3] Dune (2021)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Path: /movies/Dune (2021)/Dune.2021.1080p.mkv
+Size: 14.4 GB
+Hardlinks: 1 (not hardlinked)
+Status: △ Alternate torrents available in qBittorrent
+  [1] Dune.2021.2160p.HDR.x265-group2
+      Score 88% | Progress 100.0% | Complete | Year match | Size 24.0 GB (+66.7% vs library)
+  [2] Dune.2021.1080p.BluRay.x264-group3
+      Score 74% | Progress 100.0% | Complete | Size 11.0 GB (~same size)
+
+→ Choose alternate torrent to re-import [1-2/n/q]: 1
+✓ Re-imported using "Dune.2021.2160p.HDR.x265-group2"
 ```
+
+### Alternate Torrent Selection
+
+If the original torrent path no longer exists in qBittorrent, arrbiter now scores and displays alternate torrents that match the movie title. Pick one of the numbered options to re-import from that torrent (or skip). With `--no-confirm` the top-ranked torrent is used automatically. Alternate matching prefers completed, seeding torrents with similar names, years, and sizes, so you can replace non-hardlinked files without redownloading them.
 
 ### How It Works
 
 1. **Detection**: Uses system calls to check the hardlink count of each movie file
 2. **qBittorrent Search**: For non-hardlinked files, searches qBittorrent for matching torrents
-3. **Re-import**: If found in qBittorrent, uses Radarr's manual import to create a hardlink
-4. **Cleanup**: If not found, optionally deletes the file and triggers a new search in Radarr
+3. **Alternate Suggestions**: If the original torrent is gone, ranks other torrents in qBittorrent that match the movie
+4. **Re-import**: If found in qBittorrent, uses Radarr's manual import to create a hardlink
+5. **Cleanup**: If not found, optionally deletes the file and triggers a new search in Radarr
 
 ### Requirements
 

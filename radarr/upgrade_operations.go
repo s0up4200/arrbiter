@@ -57,6 +57,11 @@ func (o *Operations) ScanMoviesForUpgrade(ctx context.Context, opts UpgradeOptio
 		formatNameMap[cf.ID] = cf.Name
 	}
 
+	// Process movie files concurrently to get detailed custom format data
+	if err := o.client.ProcessMovieFiles(ctx, movies); err != nil {
+		o.logger.Warn().Err(err).Msg("Failed to process some movie files")
+	}
+
 	var results []UpgradeResult
 	var processedCount int
 
@@ -77,28 +82,13 @@ func (o *Operations) ScanMoviesForUpgrade(ctx context.Context, opts UpgradeOptio
 			isAvailable = o.IsMovieAvailable(movie)
 		}
 
-		// Get current custom formats
+		// Get current custom formats from the movie file
 		var currentFormats []string
 		currentScore := movie.MovieFile.CustomFormatScore
 		
-		// The bulk movie API might not include custom formats, so fetch the movie file separately
-		movieFile, err := o.client.GetMovieFile(ctx, movie.MovieFile.ID)
-		if err != nil {
-			o.logger.Warn().
-				Err(err).
-				Int64("file_id", movie.MovieFile.ID).
-				Str("movie", movie.Title).
-				Msg("Failed to get movie file details, using data from bulk API")
-			// Fall back to the data we have
+		// Use the custom formats from the movie file (already processed concurrently)
+		if movie.MovieFile != nil && movie.MovieFile.CustomFormats != nil {
 			for _, cf := range movie.MovieFile.CustomFormats {
-				if cf != nil && cf.Name != "" {
-					currentFormats = append(currentFormats, cf.Name)
-				}
-			}
-		} else {
-			// Use the detailed movie file data
-			currentScore = movieFile.CustomFormatScore
-			for _, cf := range movieFile.CustomFormats {
 				if cf != nil && cf.Name != "" {
 					currentFormats = append(currentFormats, cf.Name)
 				}
@@ -248,7 +238,7 @@ func (o *Operations) ProcessUpgrades(ctx context.Context, candidates []UpgradeRe
 
 	if opts.DryRun {
 		o.logger.Info().Msg("DRY RUN MODE - No changes will be made")
-		o.printUpgradeCandidates(candidates)
+		fmt.Print(o.formatter.FormatUpgradeCandidates(candidates))
 		return nil
 	}
 
@@ -279,27 +269,11 @@ func (o *Operations) ProcessUpgrades(ctx context.Context, candidates []UpgradeRe
 		}
 	}
 
-	// Trigger searches
+	// Trigger searches using concurrent batch processing
 	if len(toSearch) > 0 {
 		o.logger.Info().Int("count", len(toSearch)).Msg("Triggering upgrade searches")
-		// Process in batches of 10 to avoid overwhelming the system
-		batchSize := 10
-		for i := 0; i < len(toSearch); i += batchSize {
-			end := i + batchSize
-			if end > len(toSearch) {
-				end = len(toSearch)
-			}
-			
-			batch := toSearch[i:end]
-			if err := o.TriggerUpgradeSearch(ctx, batch); err != nil {
-				o.logger.Error().Err(err).Msg("Failed to trigger search batch")
-				// Continue with other batches
-			}
-			
-			// Add a small delay between batches
-			if end < len(toSearch) {
-				time.Sleep(2 * time.Second)
-			}
+		if err := o.client.BatchSearchMovies(ctx, toSearch); err != nil {
+			o.logger.Error().Err(err).Msg("Failed to trigger some searches")
 		}
 	}
 
@@ -311,65 +285,3 @@ func (o *Operations) ProcessUpgrades(ctx context.Context, candidates []UpgradeRe
 	return nil
 }
 
-// printUpgradeCandidates displays upgrade candidates for user review
-func (o *Operations) printUpgradeCandidates(candidates []UpgradeResult) {
-	fmt.Printf("\nMovies that can be upgraded (%d):\n\n", len(candidates))
-
-	for i, candidate := range candidates {
-		isLast := i == len(candidates)-1
-		prefix := "\u251c"
-		if isLast {
-			prefix = "\u2570"
-		}
-
-		fmt.Printf("%s\u2500\u2500 %s (%d)\n", prefix, candidate.Movie.Title, candidate.Movie.Year)
-
-		indent := "\u2502   "
-		if isLast {
-			indent = "    "
-		}
-
-		// Current formats and score
-		if len(candidate.CurrentFormats) > 0 {
-			fmt.Printf("%sCurrent Formats: %v (Score: %d)\n", indent, candidate.CurrentFormats, candidate.CurrentFormatScore)
-		} else {
-			fmt.Printf("%sCurrent Formats: None (Score: %d)\n", indent, candidate.CurrentFormatScore)
-		}
-
-		// Missing formats
-		if len(candidate.MissingFormats) > 0 {
-			fmt.Printf("%sMissing Formats: %v\n", indent, candidate.MissingFormats)
-		}
-
-		// Status info
-		statusParts := []string{}
-		if !candidate.IsAvailable {
-			statusParts = append(statusParts, "Not Released")
-		}
-		if candidate.NeedsMonitoring {
-			statusParts = append(statusParts, "Not Monitored")
-		}
-		if len(statusParts) > 0 {
-			fmt.Printf("%sStatus: %s\n", indent, fmt.Sprint(statusParts))
-		}
-
-		// File info
-		if candidate.Movie.MovieFile != nil && candidate.Movie.MovieFile.Path != "" {
-			fmt.Printf("%sFile: %s\n", indent, candidate.Movie.MovieFile.Path)
-		}
-
-		if i < len(candidates)-1 {
-			fmt.Printf("\u2502\n")
-		}
-	}
-	fmt.Println()
-}
-
-// GetMovieByID retrieves a single movie by its ID
-func (c *Client) GetMovieByID(ctx context.Context, movieID int64) (*radarr.Movie, error) {
-	movie, err := c.client.GetMovieByIDContext(ctx, movieID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get movie ID %d: %w", movieID, err)
-	}
-	return movie, nil
-}

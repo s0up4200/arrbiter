@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/s0up4200/arrbiter/radarr"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -128,10 +128,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	if unattendedCount > 0 {
 		// Unattended mode
-		upgradeCount = unattendedCount
-		if upgradeCount > len(filteredResults) {
-			upgradeCount = len(filteredResults)
-		}
+		upgradeCount = min(unattendedCount, len(filteredResults))
 		movieText := "movie"
 		if upgradeCount != 1 {
 			movieText = "movies"
@@ -140,7 +137,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	} else {
 		// Interactive mode
 		fmt.Printf("\nEnter movie numbers to upgrade (comma-separated, e.g. 1,3,5) or 'all' for all [Enter to cancel]: ")
-		
+
 		scanner := bufio.NewScanner(os.Stdin)
 		if !scanner.Scan() {
 			if err := scanner.Err(); err != nil {
@@ -151,16 +148,16 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		input := scanner.Text()
-		
+
 		input = strings.TrimSpace(input)
-		
+
 		if input == "" {
 			fmt.Println("No movies selected for upgrade.")
 			return nil
 		}
-		
+
 		var selectedIndices []int
-		
+
 		if strings.ToLower(input) == "all" {
 			// Select all movies
 			for i := range filteredResults {
@@ -170,22 +167,22 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 			// Parse comma-separated numbers
 			parts := strings.Split(input, ",")
 			seen := make(map[int]bool)
-			
+
 			for _, part := range parts {
 				part = strings.TrimSpace(part)
 				if part == "" {
 					continue
 				}
-				
+
 				num, err := strconv.Atoi(part)
 				if err != nil {
 					return fmt.Errorf("invalid number '%s': must be a positive integer", part)
 				}
-				
+
 				if num < 1 || num > len(filteredResults) {
 					return fmt.Errorf("invalid movie number %d: must be between 1 and %d", num, len(filteredResults))
 				}
-				
+
 				// Convert to 0-based index and check for duplicates
 				idx := num - 1
 				if !seen[idx] {
@@ -193,13 +190,13 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 					seen[idx] = true
 				}
 			}
-			
+
 			if len(selectedIndices) == 0 {
 				fmt.Println("No valid movies selected for upgrade.")
 				return nil
 			}
 		}
-		
+
 		// Build selected results from indices
 		for _, idx := range selectedIndices {
 			selectedResults = append(selectedResults, filteredResults[idx])
@@ -216,7 +213,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 			// Randomly select movies
 			rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 			indices := rng.Perm(len(filteredResults))[:upgradeCount]
-			
+
 			for _, idx := range indices {
 				selectedResults = append(selectedResults, filteredResults[idx])
 			}
@@ -267,14 +264,11 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		// Trigger searches in batches
 		batchSize := 10
 		for i := 0; i < len(movieIDs); i += batchSize {
-			end := i + batchSize
-			if end > len(movieIDs) {
-				end = len(movieIDs)
-			}
-			
+			end := min(i+batchSize, len(movieIDs))
+
 			batch := movieIDs[i:end]
 			fmt.Printf("→ Searching batch of %d movies... ", len(batch))
-			
+
 			err := operations.TriggerUpgradeSearch(ctx, batch)
 			if err != nil {
 				logger.Error().Err(err).Msg("Failed to trigger upgrade search")
@@ -284,7 +278,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 				fmt.Printf("✓ Search triggered\n")
 				successCount += len(batch)
 			}
-			
+
 			// Add a small delay between batches
 			if end < len(movieIDs) {
 				time.Sleep(2 * time.Second)
