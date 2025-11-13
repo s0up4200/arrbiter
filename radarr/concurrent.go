@@ -165,24 +165,25 @@ func (c *Client) BatchSearchMovies(ctx context.Context, movieIDs []int64) error 
 		end := min(start+batchSize, len(movieIDs))
 
 		batch := movieIDs[start:end]
+		batchCopy := batch
 		g.Go(func() error {
 			searchCommand := &radarr.CommandRequest{
 				Name:     "MoviesSearch",
-				MovieIDs: batch,
+				MovieIDs: batchCopy,
 			}
 
 			_, err := c.SendCommand(ctx, searchCommand)
 			if err != nil {
 				c.logger.Error().
 					Err(err).
-					Interface("movie_ids", batch).
+					Interface("movie_ids", batchCopy).
 					Msg("Failed to trigger search for batch")
 				// Continue with other batches
 				return nil
 			}
 
 			c.logger.Info().
-				Interface("movie_ids", batch).
+				Interface("movie_ids", batchCopy).
 				Msg("Successfully triggered search for batch")
 			return nil
 		})
@@ -205,12 +206,13 @@ func (c *Client) EnrichMoviesFromMultipleSources(
 
 	// Run each enricher concurrently
 	for _, enricher := range enrichers {
+		enricherCopy := enricher
 		g.Go(func() error {
-			if err := enricher.EnrichMovies(ctx, movies); err != nil {
+			if err := enricherCopy.EnrichMovies(ctx, movies); err != nil {
 				// Log but don't fail the entire operation
 				c.logger.Warn().
 					Err(err).
-					Type("enricher", enricher).
+					Type("enricher", enricherCopy).
 					Msg("Failed to enrich movies")
 			}
 			return nil
