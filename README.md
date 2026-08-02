@@ -42,6 +42,7 @@ arrbiter delete
 ## Key Features
 
 - **Smart Cleanup**: Remove unwatched, low-rated, or old content automatically
+- **TV Series Support**: Same cleanup flow for Sonarr via `filter_tv` filters
 - **Request Tracking**: Clean up movies people requested but never watched
 - **Watch Analytics**: Integration with Tautulli for viewing history
 - **Quality Upgrades**: Find and upgrade movies missing custom formats
@@ -56,6 +57,7 @@ arrbiter delete
 - **Operating System**: Linux, macOS, FreeBSD, or Windows
 
 ### Optional (for enhanced features)
+- **Sonarr** v3+: For TV series cleanup via `filter_tv` filters
 - **Tautulli**: For watch history tracking and user-specific filtering
 - **Overseerr/Jellyseerr**: For request tracking and accountability features  
 - **qBittorrent**: For hardlink management and storage optimization
@@ -261,6 +263,47 @@ arrbiter delete --no-confirm
 ```
 
 All deletions remove the associated movie files from disk, so lean on `--dry-run` when you want to double-check the impact first.
+
+## TV Series (Sonarr)
+
+Add a `sonarr:` block to your config and define series filters under `filter_tv:`. The same
+`list` and `delete` commands then process series after movies, with the same safety settings.
+Deletion is whole-series (the series and all its files are removed from Sonarr).
+
+```yaml
+sonarr:
+  url: http://localhost:8989
+  api_key: your-sonarr-api-key
+
+filter_tv:
+  abandoned_requests: isRequested() and notWatchedByRequester() and Added < daysAgo(60)
+  stale_shows: LastWatched < monthsAgo(6) and Added < monthsAgo(6) and not hasTag("keep")
+```
+
+Series filters use the same helper names as movie filters (`hasTag`, `watchedBy`,
+`requestedBy`, date helpers, ...) plus series-specific ones. Watch semantics are
+episode-based: a user "watched" a series when they've seen at least `min_watch_percent`
+of the episodes on disk.
+
+```bash
+# Series properties
+Title, Year, Added, Ended, Status        # Status: continuing, ended, upcoming
+EpisodeCount                             # Episodes with files on disk
+TotalEpisodes                            # All episodes known to Sonarr
+SizeOnDisk                               # Bytes on disk
+Watched, WatchedEpisodes, WatchCount     # Aggregate across all users
+LastWatched, WatchProgress               # WatchProgress: % of on-disk episodes seen
+
+# Series helper functions
+watchedBy("user")            # Watched >= min_watch_percent of on-disk episodes
+watchProgressBy("user")      # % of on-disk episodes the user has watched
+watchedEpisodesBy("user")    # Distinct episodes the user has watched
+watchCountBy("user")         # Total episode plays by the user
+lastWatchedBy("user")        # Time of the user's last episode play (zero if never)
+# ...plus all tag, date, and request helpers from movie filters
+```
+
+Movie-only helpers (ratings, hardlink data) are not available in `filter_tv` expressions.
 
 ## Filter Expression Syntax
 

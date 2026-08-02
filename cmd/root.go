@@ -16,17 +16,19 @@ import (
 	"github.com/s0up4200/arrbiter/overseerr"
 	"github.com/s0up4200/arrbiter/qbittorrent"
 	"github.com/s0up4200/arrbiter/radarr"
+	"github.com/s0up4200/arrbiter/sonarr"
 	"github.com/s0up4200/arrbiter/tautulli"
 )
 
 var (
-	cfgFile         string
-	cfg             *config.Config
-	logger          zerolog.Logger
-	radarrClient    *radarr.Client
-	tautulliClient  *tautulli.Client
-	overseerrClient *overseerr.Client
-	operations      *radarr.Operations
+	cfgFile          string
+	cfg              *config.Config
+	logger           zerolog.Logger
+	radarrClient     *radarr.Client
+	tautulliClient   *tautulli.Client
+	overseerrClient  *overseerr.Client
+	operations       *radarr.Operations
+	sonarrOperations *sonarr.Operations
 
 	// Command flags
 	dryRun        bool
@@ -90,6 +92,17 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 
 	operations = radarr.NewOperations(radarrClient, logger)
 
+	// Create Sonarr client if URL and API key are provided
+	if cfg.Sonarr.URL != "" && cfg.Sonarr.APIKey != "" {
+		sonarrClient, err := sonarr.NewClient(cfg.Sonarr.URL, cfg.Sonarr.APIKey, logger)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to create Sonarr client, continuing without series support")
+		} else {
+			sonarrOperations = sonarr.NewOperations(sonarrClient, logger)
+			logger.Info().Msg("Sonarr integration enabled")
+		}
+	}
+
 	// Create Tautulli client if URL and API key are provided
 	if cfg.Tautulli.URL != "" && cfg.Tautulli.APIKey != "" {
 		tautulliClient, err = tautulli.NewClient(cfg.Tautulli.URL, cfg.Tautulli.APIKey, logger)
@@ -98,6 +111,10 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 		} else {
 			operations.SetTautulliClient(tautulliClient)
 			operations.SetMinWatchPercent(cfg.Tautulli.MinWatchPercent)
+			if sonarrOperations != nil {
+				sonarrOperations.SetTautulliClient(tautulliClient)
+				sonarrOperations.SetMinWatchPercent(cfg.Tautulli.MinWatchPercent)
+			}
 			logger.Info().Msg("Tautulli integration enabled")
 		}
 	}
@@ -109,6 +126,9 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 			logger.Warn().Err(err).Msg("Failed to create Overseerr client, continuing without request data")
 		} else {
 			operations.SetOverseerrClient(overseerrClient)
+			if sonarrOperations != nil {
+				sonarrOperations.SetOverseerrClient(overseerrClient)
+			}
 			logger.Info().Msg("Overseerr integration enabled")
 		}
 	}
@@ -176,15 +196,32 @@ func init() {
 
 func runList(cmd *cobra.Command, args []string) error {
 	// Check if any filters are defined
-	if len(cfg.Filter) == 0 {
+	if len(cfg.Filter) == 0 && !tvFiltersEnabled() {
 		fmt.Println("No filters defined in configuration.")
 		return nil
 	}
 
+	ctx := context.Background()
+
+	if len(cfg.Filter) > 0 {
+		if err := listMovies(ctx); err != nil {
+			return err
+		}
+	}
+
+	if tvFiltersEnabled() {
+		if err := listSeries(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func listMovies(ctx context.Context) error {
 	logger.Info().Int("filter_count", len(cfg.Filter)).Msg("Processing filters")
 
 	// Get all movies once
-	ctx := context.Background()
 	allMovies, err := operations.GetAllMovies(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get movies: %w", err)
@@ -313,15 +350,32 @@ func init() {
 
 func runDelete(cmd *cobra.Command, args []string) error {
 	// Check if any filters are defined
-	if len(cfg.Filter) == 0 {
+	if len(cfg.Filter) == 0 && !tvFiltersEnabled() {
 		fmt.Println("No filters defined in configuration.")
 		return nil
 	}
 
+	ctx := context.Background()
+
+	if len(cfg.Filter) > 0 {
+		if err := deleteMovies(ctx); err != nil {
+			return err
+		}
+	}
+
+	if tvFiltersEnabled() {
+		if err := deleteSeries(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func deleteMovies(ctx context.Context) error {
 	logger.Info().Int("filter_count", len(cfg.Filter)).Msg("Processing filters for deletion")
 
 	// Get all movies once
-	ctx := context.Background()
 	allMovies, err := operations.GetAllMovies(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get movies: %w", err)
@@ -424,6 +478,14 @@ func runTest(cmd *cobra.Command, args []string) error {
 	// Test Radarr
 	logger.Info().Str("url", cfg.Radarr.URL).Msg("Testing Radarr connection")
 	logger.Info().Msg("✓ Radarr connection successful")
+
+	// Test Sonarr if configured
+	if sonarrOperations != nil {
+		logger.Info().Str("url", cfg.Sonarr.URL).Msg("Testing Sonarr connection")
+		logger.Info().Msg("✓ Sonarr connection successful")
+	} else {
+		logger.Info().Msg("Sonarr integration: Not configured")
+	}
 
 	// Test Tautulli if configured
 	if tautulliClient != nil {

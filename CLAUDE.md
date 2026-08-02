@@ -6,14 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Build the binary
-go build
+go build            # or: make build (static binary into build/arrbiter)
 
 # Download dependencies
 go mod download
 go mod tidy
 
+# Lint (installs golangci-lint if needed)
+make lint
+
 # Run tests
-go test ./...
+go test ./...       # add -race when touching concurrency
 
 # Run a specific test package
 go test ./filter/...
@@ -35,7 +38,7 @@ go install
 
 ## Architecture Overview
 
-This is a CLI tool for managing Radarr movies with advanced filtering, Tautulli integration for watch status checking, Overseerr integration for request tracking, and qBittorrent integration for hardlink management. The codebase follows a modular design with clear separation of concerns.
+This is a CLI tool for managing Radarr movies and Sonarr series with advanced filtering, Tautulli integration for watch status checking, Overseerr integration for request tracking, and qBittorrent integration for hardlink management. The codebase follows a modular design with clear separation of concerns.
 
 ### Core Components
 
@@ -48,13 +51,16 @@ This is a CLI tool for managing Radarr movies with advanced filtering, Tautulli 
      - Rating: `imdbRating()`, `tmdbRating()`, `rottenTomatoesRating()`, `metacriticRating()`
      - Request: `requestedBy()`, `requestedAfter()`, `requestedBefore()`, `requestStatus()`, `approvedBy()`, `isRequested()`, `notRequested()`, `notWatchedByRequester()`, `watchedByRequester()`
    - Filter evaluation happens against `MovieInfo` structs with full access to all properties including ratings and request data
+   - Series filters (`series.go`) evaluate against `sonarr.SeriesInfo` with the same helper names plus `watchedEpisodesBy()`, `lastWatchedBy()`; movie-only helpers (ratings, hardlink) are absent there
+   - Username lookups in watch helpers are case-insensitive (`lookupUser`)
    - Supports complex expressions with arithmetic, comparisons, string operations, regex matching
    - Backwards compatibility layer (`compat.go`) converts legacy syntax to expr format
 
 2. **API Clients**
    - **Radarr Client** (`radarr/`): Wraps golift/starr library, provides movie management
-   - **Tautulli Client** (`tautulli/`): Custom implementation for Plex watch history
-   - **Overseerr Client** (`overseerr/`): Fetches movie request data (who requested, when, status)
+   - **Sonarr Client** (`sonarr/`): Wraps golift/starr library, provides series management (list/delete, episode-based watch enrichment)
+   - **Tautulli Client** (`tautulli/`): Custom implementation for Plex watch history (movie + episode history; `series.go` groups episodes by show)
+   - **Overseerr Client** (`overseerr/`): Fetches movie and TV request data (who requested, when, status)
    - **qBittorrent Client** (`qbittorrent/`): Uses autobrr/go-qbittorrent for torrent management
    - All clients support batch operations for efficiency
 
@@ -62,13 +68,17 @@ This is a CLI tool for managing Radarr movies with advanced filtering, Tautulli 
    - Uses Viper for YAML configuration with defaults
    - Supports multiple config locations (current dir, ~/.radarr-cleanup/, /etc/radarr-cleanup/)
    - Config validation ensures API keys are set
-   - Filters are defined as a simple map[string]string under the `filter:` section
+   - Movie filters are a map[string]string under `filter:`; series filters under `filter_tv:`
+   - Sonarr is optional: enabled when `sonarr.url` and `sonarr.api_key` are both set
+   - Document any new settings in `config.yaml.example`
 
 4. **CLI Framework** (`cmd/`)
    - Uses Cobra for command structure
    - Main commands: `list`, `delete`, `test`, `import`, `hardlink`
    - No filter/preset flags - all filters from config are evaluated automatically
    - Results are grouped by which filter matched them
+   - `list`/`delete` process movies first, then series when Sonarr is configured (`cmd/series.go`)
+   - Series deletion is whole-series (series + files), honoring the same `safety:` settings
 
 5. **Hardlink Detection** (`hardlink/`)
    - Unix-specific implementation using syscall for hardlink detection
@@ -176,9 +186,13 @@ When modifying API interactions:
 The tool expects sensitive API keys in `config.yaml` (gitignored). Example configuration is in `config.yaml.example`. 
 
 Optional integrations:
+- Sonarr integration is enabled automatically when both `url` and `api_key` are provided (adds `filter_tv` series processing)
 - Tautulli integration is enabled automatically when both `url` and `api_key` are provided
 - Overseerr integration is enabled automatically when both `url` and `api_key` are provided
 - qBittorrent integration is enabled automatically when `url` and `username` are provided
+
+TV watch semantics: an episode counts as watched at `tautulli.min_watch_percent`; a series
+counts as watched by a user when they've seen at least that percentage of episodes on disk.
 
 All integrations operate independently - just leave the configuration empty if you don't want to use them.
 
@@ -190,6 +204,12 @@ The codebase uses zerolog for structured logging with the following characterist
 - Log levels: trace, debug, info (default), warn, error
 - Timestamps in HH:MM:SS format
 - Clear separation between user output (fmt) and diagnostic logs (zerolog)
+
+## Commit & PR Conventions
+
+Imperative commit messages with a scoped prefix where helpful (`feat:`, `fix:`, `refactor:`),
+matching recent history. Keep commits focused. Never ship changes that bypass dry-run
+protections; when touching deletion paths, demonstrate the `--dry-run` workflow in the PR.
 
 ## Release Process
 

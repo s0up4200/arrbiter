@@ -225,8 +225,13 @@ func (c *Client) FetchPage(ctx context.Context, page, pageSize int) (*RequestsRe
 	return &response, nil
 }
 
-// FetchAll fetches all requests using pagination
+// FetchAll fetches all movie requests using pagination
 func (c *Client) FetchAll(ctx context.Context) ([]MediaRequest, error) {
+	return c.fetchAllByType(ctx, MediaTypeMovie)
+}
+
+// fetchAllByType fetches all requests of the given media type using pagination
+func (c *Client) fetchAllByType(ctx context.Context, mediaType MediaType) ([]MediaRequest, error) {
 	var allRequests []MediaRequest
 	page := 1
 
@@ -243,9 +248,8 @@ func (c *Client) FetchAll(ctx context.Context) ([]MediaRequest, error) {
 			return nil, err
 		}
 
-		// Filter for movie requests only
 		for _, req := range response.Results {
-			if req.IsMovieRequest() {
+			if req.Type == mediaType {
 				allRequests = append(allRequests, req)
 			}
 		}
@@ -253,7 +257,8 @@ func (c *Client) FetchAll(ctx context.Context) ([]MediaRequest, error) {
 		c.logger.Debug().
 			Int("page", page).
 			Int("fetched", len(response.Results)).
-			Int("movies", len(allRequests)).
+			Int("matched", len(allRequests)).
+			Str("media_type", string(mediaType)).
 			Msg("Fetched request page")
 
 		// Check if we've retrieved all pages
@@ -265,6 +270,20 @@ func (c *Client) FetchAll(ctx context.Context) ([]MediaRequest, error) {
 	}
 
 	return allRequests, nil
+}
+
+// GetTVRequests retrieves all TV requests from Overseerr
+func (c *Client) GetTVRequests(ctx context.Context) ([]MediaRequest, error) {
+	requests, err := c.fetchAllByType(ctx, MediaTypeTV)
+	if err != nil {
+		return nil, fmt.Errorf("fetching tv requests: %w", err)
+	}
+
+	c.logger.Info().
+		Int("count", len(requests)).
+		Msg("Retrieved TV requests from Overseerr")
+
+	return requests, nil
 }
 
 // GetMovieRequests retrieves all movie requests from Overseerr

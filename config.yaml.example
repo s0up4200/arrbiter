@@ -2,6 +2,11 @@ radarr:
   url: http://localhost:7878
   api_key: your-api-key-here
 
+# Optional: enables TV series support (list/delete via filter_tv)
+sonarr:
+  url: http://localhost:8989
+  api_key: your-sonarr-api-key
+
 tautulli:
   url: http://localhost:8181
   api_key: your-tautulli-api-key
@@ -35,6 +40,16 @@ filter:
   
   # Tag-based removal
   tagged_removal: hasTag("cleanup") or hasTag("remove")
+
+# TV series filters (requires sonarr config above)
+# Series matching ANY filter are included; deletion removes the whole series and its files.
+# watchedBy()/watchProgressBy() are based on % of downloaded episodes watched per user.
+filter_tv:
+  # Requested shows the requester abandoned
+  abandoned_requests: isRequested() and notWatchedByRequester() and Added < daysAgo(60)
+
+  # Shows nobody has touched in 6 months
+  stale_shows: LastWatched < monthsAgo(6) and Added < monthsAgo(6) and not hasTag("keep")
 
 safety:
   dry_run: true
