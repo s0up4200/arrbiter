@@ -53,10 +53,11 @@ arrbiter delete
 ## Prerequisites
 
 ### Required
-- **Radarr** v3+ with API access
+- At least one of **Radarr** v3+ or **Sonarr** v3+ with API access
 - **Operating System**: Linux, macOS, FreeBSD, or Windows
 
 ### Optional (for enhanced features)
+- **Radarr** v3+: For movie cleanup via `filter:`, and the `hardlink`, `upgrade`, and `import` commands
 - **Sonarr** v3+: For TV series cleanup via `filter_tv` filters
 - **Tautulli**: For watch history tracking and user-specific filtering
 - **Overseerr/Jellyseerr**: For request tracking and accountability features  
@@ -64,11 +65,11 @@ arrbiter delete
 - **Same filesystem**: qBittorrent and Radarr must be on the same filesystem for hardlinks
 
 ### Permissions Needed
-- Read access to Radarr API
-- Write access to Radarr (for deletions)
+- Read access to Radarr/Sonarr API
+- Write access to Radarr/Sonarr (for deletions)
 - Network access to optional services (Tautulli, Overseerr, qBittorrent)
 
-> **Tip**: You can start with just Radarr and add other integrations later!
+> **Tip**: You can start with just Radarr or just Sonarr and add other integrations later!
 
 ## Installation
 
@@ -123,7 +124,7 @@ go build
 ## 5-Minute Quick Start
 
 ### Step 1: Create Configuration
-Create a `config.yaml` file with your Radarr details:
+Create a `config.yaml` file with at least one of Radarr or Sonarr configured. Example using Radarr:
 
 ```yaml
 radarr:
@@ -269,6 +270,9 @@ All deletions remove the associated movie files from disk, so lean on `--dry-run
 Add a `sonarr:` block to your config and define series filters under `filter_tv:`. The same
 `list` and `delete` commands then process series after movies, with the same safety settings.
 Deletion is whole-series (the series and all its files are removed from Sonarr).
+
+You can use Sonarr on its own by omitting the `radarr:` block entirely (only `filter:`-driven
+movie commands like `hardlink`, `upgrade`, and `import` require Radarr).
 
 ```yaml
 sonarr:
@@ -942,7 +946,7 @@ A: Yes! The tool has multiple safety features: dry-run mode is enabled by defaul
 A: No, deletions are permanent. That's why dry-run mode is so important. Test your filters thoroughly before setting `dry_run: false` in your config.
 
 **Q: Do I need all the integrations (Tautulli, Overseerr, qBittorrent)?**  
-A: No! You only need Radarr. The other integrations add features but are completely optional.
+A: No! You only need at least one of Radarr or Sonarr. The other integrations add features but are completely optional.
 
 **Q: How do I find my Radarr API key?**  
 A: In Radarr, go to Settings > General > Security > API Key

@@ -14,6 +14,19 @@ func tvFiltersEnabled() bool {
 	return sonarrOperations != nil && len(cfg.FilterTV) > 0
 }
 
+// movieFiltersEnabled reports whether movie processing should run.
+func movieFiltersEnabled() bool {
+	return operations != nil && len(cfg.Filter) > 0
+}
+
+// requireRadarr errors when a command needs Radarr but it is not configured.
+func requireRadarr() error {
+	if operations == nil {
+		return fmt.Errorf("Radarr is not configured (required for this command)")
+	}
+	return nil
+}
+
 // evaluateSeriesFilters fetches all series and evaluates every filter_tv entry.
 func evaluateSeriesFilters(ctx context.Context) (map[string][]sonarr.SeriesInfo, map[int64]sonarr.SeriesInfo, error) {
 	allSeries, err := sonarrOperations.GetAllSeries(ctx)

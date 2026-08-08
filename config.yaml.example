@@ -1,8 +1,11 @@
+# At least one of radarr or sonarr is required.
+# radarr: enables movie support (list/delete/hardlink/upgrade/import via filter:)
 radarr:
   url: http://localhost:7878
   api_key: your-api-key-here
 
 # Optional: enables TV series support (list/delete via filter_tv)
+# You can use Sonarr on its own by omitting the radarr block.
 sonarr:
   url: http://localhost:8989
   api_key: your-sonarr-api-key

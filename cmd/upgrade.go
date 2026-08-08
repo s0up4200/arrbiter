@@ -43,6 +43,10 @@ func init() {
 }
 
 func runUpgrade(cmd *cobra.Command, args []string) error {
+	if err := requireRadarr(); err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 
 	// Check if custom formats are configured
