@@ -53,6 +53,7 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 
 	var sb strings.Builder
 	var watchedCount int
+	var totalBytes int64
 
 	// Header
 	sb.WriteString("\nMovie")
@@ -70,6 +71,9 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 		}
 
 		fmt.Fprintf(&sb, "%s\u2500\u2500 %s (%d)\n", prefix, movie.Title, movie.Year)
+		if movie.MovieFile != nil && movie.MovieFile.Size > 0 {
+			totalBytes += movie.MovieFile.Size
+		}
 
 		// Track watch status for warning
 		if movie.Watched {
@@ -132,7 +136,7 @@ func (f *ConsoleFormatter) FormatMoviesToDelete(movies []MovieInfo) string {
 		}
 	}
 
-	sb.WriteString("\n")
+	fmt.Fprintf(&sb, "\nTotal file size: %.2f GiB\n\n", float64(totalBytes)/(1<<30))
 
 	return sb.String()
 }

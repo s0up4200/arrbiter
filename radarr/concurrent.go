@@ -90,7 +90,7 @@ func (c *Client) BatchDeleteMovies(ctx context.Context, movies []MovieInfo) Batc
 	g.SetLimit(5) // Lower limit for delete operations
 
 	// Use channels for result collection
-	successChan := make(chan int64, len(movies))
+	successChan := make(chan MovieInfo, len(movies))
 	errorChan := make(chan DeleteError, len(movies))
 
 	for _, movie := range movies {
@@ -105,7 +105,11 @@ func (c *Client) BatchDeleteMovies(ctx context.Context, movies []MovieInfo) Batc
 					Err:        err,
 				}
 			} else {
-				successChan <- currentMovie.ID
+				c.logger.Info().
+					Str("title", currentMovie.Title).
+					Int("year", currentMovie.Year).
+					Msg("Successfully deleted movie")
+				successChan <- currentMovie
 			}
 			return nil // Don't stop on individual errors
 		})
@@ -120,8 +124,11 @@ func (c *Client) BatchDeleteMovies(ctx context.Context, movies []MovieInfo) Batc
 	close(errorChan)
 
 	// Collect results
-	for id := range successChan {
-		result.Successful = append(result.Successful, id)
+	for movie := range successChan {
+		result.Successful = append(result.Successful, movie.ID)
+		if movie.MovieFile != nil && movie.MovieFile.Size > 0 {
+			result.DeletedBytes += movie.MovieFile.Size
+		}
 	}
 	for err := range errorChan {
 		result.Failed = append(result.Failed, err)
@@ -135,6 +142,8 @@ type BatchDeleteResult struct {
 	Requested  int
 	Successful []int64
 	Failed     []DeleteError
+	// DeletedBytes sums known file sizes from successful deletions.
+	DeletedBytes int64
 }
 
 // DeleteError contains information about a failed delete operation
@@ -209,11 +218,7 @@ func (c *Client) EnrichMoviesFromMultipleSources(
 		enricherCopy := enricher
 		g.Go(func() error {
 			if err := enricherCopy.EnrichMovies(ctx, movies); err != nil {
-				// Log but don't fail the entire operation
-				c.logger.Warn().
-					Err(err).
-					Type("enricher", enricherCopy).
-					Msg("Failed to enrich movies")
+				return fmt.Errorf("enrich movies with %T: %w", enricherCopy, err)
 			}
 			return nil
 		})

@@ -3,10 +3,12 @@ package config
 // Config represents the complete configuration structure
 type Config struct {
 	Radarr      RadarrConfig      `mapstructure:"radarr"`
+	Sonarr      SonarrConfig      `mapstructure:"sonarr"`
 	Tautulli    TautulliConfig    `mapstructure:"tautulli"`
 	Overseerr   OverseerrConfig   `mapstructure:"overseerr"`
 	QBittorrent QBittorrentConfig `mapstructure:"qbittorrent"`
 	Filter      FilterConfig      `mapstructure:"filter"`
+	FilterTV    FilterConfig      `mapstructure:"filter_tv"`
 	Safety      SafetyConfig      `mapstructure:"safety"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
 	Upgrade     UpgradeConfig     `mapstructure:"upgrade"`
@@ -14,6 +16,12 @@ type Config struct {
 
 // RadarrConfig holds Radarr API connection details
 type RadarrConfig struct {
+	URL    string `mapstructure:"url"`
+	APIKey string `mapstructure:"api_key"`
+}
+
+// SonarrConfig holds Sonarr API connection details
+type SonarrConfig struct {
 	URL    string `mapstructure:"url"`
 	APIKey string `mapstructure:"api_key"`
 }

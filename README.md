@@ -39,9 +39,13 @@ arrbiter delete --dry-run
 arrbiter delete
 ```
 
+Movie deletion logs show each title and release year. The final summary reports successful and failed deletions and the known file size removed by successful deletions.
+Dry runs and confirmation prompts show the candidate file-size total. These totals use Radarr metadata. Hardlinks and the Radarr recycle bin can retain disk data after deletion.
+
 ## Key Features
 
 - **Smart Cleanup**: Remove unwatched, low-rated, or old content automatically
+- **TV Series Support**: Same cleanup flow for Sonarr via `filter_tv` filters
 - **Request Tracking**: Clean up movies people requested but never watched
 - **Watch Analytics**: Integration with Tautulli for viewing history
 - **Quality Upgrades**: Find and upgrade movies missing custom formats
@@ -52,21 +56,23 @@ arrbiter delete
 ## Prerequisites
 
 ### Required
-- **Radarr** v3+ with API access
+- At least one of **Radarr** v3+ or **Sonarr** v3+ with API access
 - **Operating System**: Linux, macOS, FreeBSD, or Windows
 
 ### Optional (for enhanced features)
+- **Radarr** v3+: For movie cleanup via `filter:`, and the `hardlink`, `upgrade`, and `import` commands
+- **Sonarr** v3+: For TV series cleanup via `filter_tv` filters
 - **Tautulli**: For watch history tracking and user-specific filtering
 - **Overseerr/Jellyseerr**: For request tracking and accountability features  
 - **qBittorrent**: For hardlink management and storage optimization
 - **Same filesystem**: qBittorrent and Radarr must be on the same filesystem for hardlinks
 
 ### Permissions Needed
-- Read access to Radarr API
-- Write access to Radarr (for deletions)
+- Read access to Radarr/Sonarr API
+- Write access to Radarr/Sonarr (for deletions)
 - Network access to optional services (Tautulli, Overseerr, qBittorrent)
 
-> **Tip**: You can start with just Radarr and add other integrations later!
+> **Tip**: You can start with just Radarr or just Sonarr and add other integrations later!
 
 ## Installation
 
@@ -121,7 +127,7 @@ go build
 ## 5-Minute Quick Start
 
 ### Step 1: Create Configuration
-Create a `config.yaml` file with your Radarr details:
+Create a `config.yaml` file with at least one of Radarr or Sonarr configured. Example using Radarr:
 
 ```yaml
 radarr:
@@ -261,6 +267,57 @@ arrbiter delete --no-confirm
 ```
 
 All deletions remove the associated movie files from disk, so lean on `--dry-run` when you want to double-check the impact first.
+
+## TV Series (Sonarr)
+
+Add a `sonarr:` block to your config and define series filters under `filter_tv:`. The same
+`list` and `delete` commands then process series after movies, with the same safety settings.
+Deletion is whole-series (the series and all its files are removed from Sonarr).
+
+You can use Sonarr on its own by omitting the `radarr:` block entirely (only `filter:`-driven
+movie commands like `hardlink`, `upgrade`, and `import` require Radarr).
+
+```yaml
+sonarr:
+  url: http://localhost:8989
+  api_key: your-sonarr-api-key
+
+filter_tv:
+  abandoned_requests: isRequested() and notWatchedByRequester() and Added < daysAgo(60)
+  stale_shows: LastWatched < monthsAgo(6) and Added < monthsAgo(6) and not hasTag("keep")
+```
+
+Series filters use the same helper names as movie filters (`hasTag`, `watchedBy`,
+`requestedBy`, date helpers, ...) plus series-specific ones. Watch semantics are
+episode-based: a user "watched" a series when they've seen at least `min_watch_percent`
+of the episodes on disk.
+
+An episode counts as watched only when its completion percentage reaches that threshold.
+Progress includes only episodes that still have files in Sonarr. Plays of removed episodes
+still count toward `LastWatched` and `WatchCount`. Shows are matched by TVDB or IMDb ID,
+with title and year as a fallback. Missing or ambiguous Plex show metadata stops the run.
+
+```bash
+# Series properties
+Title, Year, Added, Ended, Status        # Status: continuing, ended, upcoming
+EpisodeCount                             # Episodes with files on disk
+TotalEpisodes                            # All episodes known to Sonarr
+SizeOnDisk                               # Bytes on disk
+Watched, WatchedEpisodes, WatchCount     # Aggregate across all users
+LastWatched, WatchProgress               # WatchProgress: % of on-disk episodes seen
+
+# Series helper functions
+watchedBy("user")            # Watched >= min_watch_percent of on-disk episodes
+watchProgressBy("user")      # % of on-disk episodes the user has watched
+watchedEpisodesBy("user")    # Distinct episodes the user has watched
+watchCountBy("user")         # Total episode plays by the user
+lastWatchedBy("user")        # Time of the user's last episode play (zero if never)
+# ...plus all tag, date, and request helpers from movie filters
+```
+
+Movie-only helpers (ratings, hardlink data) are not available in `filter_tv` expressions.
+Invalid TV filters stop the run. Connection failures for configured Radarr, Sonarr,
+Tautulli, or Overseerr services also stop the run, as do failed watch or request lookups.
 
 ## Filter Expression Syntax
 
@@ -899,7 +956,7 @@ A: Yes! The tool has multiple safety features: dry-run mode is enabled by defaul
 A: No, deletions are permanent. That's why dry-run mode is so important. Test your filters thoroughly before setting `dry_run: false` in your config.
 
 **Q: Do I need all the integrations (Tautulli, Overseerr, qBittorrent)?**  
-A: No! You only need Radarr. The other integrations add features but are completely optional.
+A: No! You only need at least one of Radarr or Sonarr. The other integrations add features but are completely optional.
 
 **Q: How do I find my Radarr API key?**  
 A: In Radarr, go to Settings > General > Security > API Key

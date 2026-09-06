@@ -34,6 +34,10 @@ func init() {
 }
 
 func runHardlink(cmd *cobra.Command, args []string) error {
+	if err := requireRadarr(); err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 
 	// Check if qBittorrent is configured

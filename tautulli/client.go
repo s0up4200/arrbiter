@@ -27,11 +27,12 @@ const (
 
 // historyOptions contains parameters for history queries.
 type historyOptions struct {
-	guid   string
-	search string
-	user   string
-	limit  int
-	start  int
+	guid      string
+	search    string
+	user      string
+	limit     int
+	start     int
+	mediaType string // defaults to "movie"
 }
 
 // Client provides access to the Tautulli API for retrieving Plex watch history.
@@ -190,8 +191,13 @@ func (c *Client) getHistory(ctx context.Context, opts historyOptions) (*HistoryR
 		limit = defaultHistoryLimit
 	}
 
+	mediaType := opts.mediaType
+	if mediaType == "" {
+		mediaType = "movie"
+	}
+
 	params := url.Values{
-		"media_type": {"movie"},
+		"media_type": {mediaType},
 		"length":     {strconv.Itoa(limit)},
 	}
 

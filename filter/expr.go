@@ -272,7 +272,7 @@ func createHasTagFunc(tags []string) func(string) bool {
 
 func createWatchedByFunc(watchData map[string]*radarr.UserWatchInfo) func(string) bool {
 	return func(username string) bool {
-		if userData, exists := watchData[username]; exists {
+		if userData, exists := lookupUser(watchData, username); exists {
 			return userData.Watched
 		}
 		return false
@@ -281,7 +281,7 @@ func createWatchedByFunc(watchData map[string]*radarr.UserWatchInfo) func(string
 
 func createWatchCountByFunc(watchData map[string]*radarr.UserWatchInfo) func(string) int {
 	return func(username string) int {
-		if userData, exists := watchData[username]; exists {
+		if userData, exists := lookupUser(watchData, username); exists {
 			return userData.WatchCount
 		}
 		return 0
@@ -290,7 +290,7 @@ func createWatchCountByFunc(watchData map[string]*radarr.UserWatchInfo) func(str
 
 func createWatchProgressByFunc(watchData map[string]*radarr.UserWatchInfo) func(string) float64 {
 	return func(username string) float64 {
-		if userData, exists := watchData[username]; exists {
+		if userData, exists := lookupUser(watchData, username); exists {
 			return userData.MaxProgress
 		}
 		return 0
@@ -373,7 +373,7 @@ func createNotWatchedByRequesterFunc(isRequested bool, requestedBy string, watch
 		}
 		// Check if the requester has watched it
 		const minWatchPercent = 85.0 // Default watch threshold
-		if userData, exists := watchData[requestedBy]; exists {
+		if userData, exists := lookupUser(watchData, requestedBy); exists {
 			return userData.MaxProgress < minWatchPercent
 		}
 		return true // Not watched if no watch data
@@ -387,7 +387,7 @@ func createWatchedByRequesterFunc(isRequested bool, requestedBy string, watchDat
 		}
 		// Check if the requester has watched it
 		const minWatchPercent = 85.0 // Default watch threshold
-		if userData, exists := watchData[requestedBy]; exists {
+		if userData, exists := lookupUser(watchData, requestedBy); exists {
 			return userData.MaxProgress >= minWatchPercent
 		}
 		return false // Not watched if no watch data

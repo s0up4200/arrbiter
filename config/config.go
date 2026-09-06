@@ -63,9 +63,6 @@ func Load(configPath string) (*Config, error) {
 
 // setDefaults sets default configuration values
 func setDefaults(v *viper.Viper) {
-	// Radarr defaults
-	v.SetDefault("radarr.url", "http://localhost:7878")
-
 	// Tautulli defaults
 	v.SetDefault("tautulli.min_watch_percent", 85.0)
 
@@ -84,14 +81,17 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("upgrade.auto_monitor", true)
 }
 
+const placeholderAPIKey = "your-api-key-here"
+
+// isConfigured reports whether an integration has a real URL and API key set.
+func isConfigured(url, apiKey string) bool {
+	return url != "" && apiKey != "" && apiKey != placeholderAPIKey
+}
+
 // validate checks if the configuration is valid
 func validate(cfg *Config) error {
-	if cfg.Radarr.URL == "" {
-		return fmt.Errorf("radarr.url is required")
-	}
-
-	if cfg.Radarr.APIKey == "" || cfg.Radarr.APIKey == "your-api-key-here" {
-		return fmt.Errorf("radarr.api_key must be set to a valid API key")
+	if !isConfigured(cfg.Radarr.URL, cfg.Radarr.APIKey) && !isConfigured(cfg.Sonarr.URL, cfg.Sonarr.APIKey) {
+		return fmt.Errorf("at least one of radarr or sonarr must be configured with a valid URL and API key")
 	}
 
 	// Validate logging level

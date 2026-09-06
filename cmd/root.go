@@ -16,17 +16,18 @@ import (
 	"github.com/s0up4200/arrbiter/overseerr"
 	"github.com/s0up4200/arrbiter/qbittorrent"
 	"github.com/s0up4200/arrbiter/radarr"
+	"github.com/s0up4200/arrbiter/sonarr"
 	"github.com/s0up4200/arrbiter/tautulli"
 )
 
 var (
-	cfgFile         string
-	cfg             *config.Config
-	logger          zerolog.Logger
-	radarrClient    *radarr.Client
-	tautulliClient  *tautulli.Client
-	overseerrClient *overseerr.Client
-	operations      *radarr.Operations
+	cfgFile          string
+	cfg              *config.Config
+	logger           zerolog.Logger
+	tautulliClient   *tautulli.Client
+	overseerrClient  *overseerr.Client
+	operations       *radarr.Operations
+	sonarrOperations *sonarr.Operations
 
 	// Command flags
 	dryRun        bool
@@ -81,23 +82,38 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 		cfg.Safety.DryRun = dryRun
 	}
 
-	// Create Radarr client
-	radarrClient, err = radarr.NewClient(cfg.Radarr.URL, cfg.Radarr.APIKey, logger)
-	if err != nil {
-		return fmt.Errorf("failed to create Radarr client: %w", err)
+	// Create Radarr client if URL and API key are provided
+	if cfg.Radarr.URL != "" && cfg.Radarr.APIKey != "" {
+		radarrClient, err := radarr.NewClient(cfg.Radarr.URL, cfg.Radarr.APIKey, logger)
+		if err != nil {
+			return fmt.Errorf("initialize Radarr: %w", err)
+		} else {
+			operations = radarr.NewOperations(radarrClient, logger)
+			logger.Info().Msg("Radarr integration enabled")
+		}
 	}
-	logger.Info().Msg("Radarr integration enabled")
 
-	operations = radarr.NewOperations(radarrClient, logger)
+	// Create Sonarr client if URL and API key are provided
+	if cfg.Sonarr.URL != "" && cfg.Sonarr.APIKey != "" {
+		sonarrClient, err := sonarr.NewClient(cfg.Sonarr.URL, cfg.Sonarr.APIKey, logger)
+		if err != nil {
+			return fmt.Errorf("initialize Sonarr: %w", err)
+		} else {
+			sonarrOperations = sonarr.NewOperations(sonarrClient, logger)
+			logger.Info().Msg("Sonarr integration enabled")
+		}
+	}
 
 	// Create Tautulli client if URL and API key are provided
 	if cfg.Tautulli.URL != "" && cfg.Tautulli.APIKey != "" {
 		tautulliClient, err = tautulli.NewClient(cfg.Tautulli.URL, cfg.Tautulli.APIKey, logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to create Tautulli client, continuing without watch status")
+			return fmt.Errorf("initialize Tautulli: %w", err)
 		} else {
-			operations.SetTautulliClient(tautulliClient)
-			operations.SetMinWatchPercent(cfg.Tautulli.MinWatchPercent)
+			for _, sink := range enrichmentSinks() {
+				sink.SetTautulliClient(tautulliClient)
+				sink.SetMinWatchPercent(cfg.Tautulli.MinWatchPercent)
+			}
 			logger.Info().Msg("Tautulli integration enabled")
 		}
 	}
@@ -106,9 +122,11 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	if cfg.Overseerr.URL != "" && cfg.Overseerr.APIKey != "" {
 		overseerrClient, err = overseerr.NewClient(cfg.Overseerr.URL, cfg.Overseerr.APIKey, logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to create Overseerr client, continuing without request data")
+			return fmt.Errorf("initialize Overseerr: %w", err)
 		} else {
-			operations.SetOverseerrClient(overseerrClient)
+			for _, sink := range enrichmentSinks() {
+				sink.SetOverseerrClient(overseerrClient)
+			}
 			logger.Info().Msg("Overseerr integration enabled")
 		}
 	}
@@ -118,13 +136,33 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 		qbittorrentClient, err := qbittorrent.NewClient(cfg.QBittorrent.URL, cfg.QBittorrent.Username, cfg.QBittorrent.Password, logger)
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to create qBittorrent client, continuing without torrent integration")
-		} else {
+		} else if operations != nil {
 			operations.SetQBittorrentClient(qbittorrentClient)
 			logger.Info().Msg("qBittorrent integration enabled")
 		}
 	}
 
 	return nil
+}
+
+// enrichmentSink is implemented by operations that can receive optional
+// enrichment clients (Tautulli watch data, Overseerr request data).
+type enrichmentSink interface {
+	SetTautulliClient(client *tautulli.Client)
+	SetMinWatchPercent(percent float64)
+	SetOverseerrClient(client *overseerr.Client)
+}
+
+// enrichmentSinks returns the configured operations that accept enrichment clients.
+func enrichmentSinks() []enrichmentSink {
+	sinks := make([]enrichmentSink, 0, 2)
+	if operations != nil {
+		sinks = append(sinks, operations)
+	}
+	if sonarrOperations != nil {
+		sinks = append(sinks, sonarrOperations)
+	}
+	return sinks
 }
 
 // setupLogger configures the zerolog logger
@@ -176,15 +214,32 @@ func init() {
 
 func runList(cmd *cobra.Command, args []string) error {
 	// Check if any filters are defined
-	if len(cfg.Filter) == 0 {
+	if len(cfg.Filter) == 0 && !tvFiltersEnabled() {
 		fmt.Println("No filters defined in configuration.")
 		return nil
 	}
 
+	ctx := context.Background()
+
+	if movieFiltersEnabled() {
+		if err := listMovies(ctx); err != nil {
+			return err
+		}
+	}
+
+	if tvFiltersEnabled() {
+		if err := listSeries(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func listMovies(ctx context.Context) error {
 	logger.Info().Int("filter_count", len(cfg.Filter)).Msg("Processing filters")
 
 	// Get all movies once
-	ctx := context.Background()
 	allMovies, err := operations.GetAllMovies(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get movies: %w", err)
@@ -313,15 +368,32 @@ func init() {
 
 func runDelete(cmd *cobra.Command, args []string) error {
 	// Check if any filters are defined
-	if len(cfg.Filter) == 0 {
+	if len(cfg.Filter) == 0 && !tvFiltersEnabled() {
 		fmt.Println("No filters defined in configuration.")
 		return nil
 	}
 
+	ctx := context.Background()
+
+	if movieFiltersEnabled() {
+		if err := deleteMovies(ctx); err != nil {
+			return err
+		}
+	}
+
+	if tvFiltersEnabled() {
+		if err := deleteSeries(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func deleteMovies(ctx context.Context) error {
 	logger.Info().Int("filter_count", len(cfg.Filter)).Msg("Processing filters for deletion")
 
 	// Get all movies once
-	ctx := context.Background()
 	allMovies, err := operations.GetAllMovies(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get movies: %w", err)
@@ -422,8 +494,20 @@ var testCmd = &cobra.Command{
 
 func runTest(cmd *cobra.Command, args []string) error {
 	// Test Radarr
-	logger.Info().Str("url", cfg.Radarr.URL).Msg("Testing Radarr connection")
-	logger.Info().Msg("✓ Radarr connection successful")
+	if operations != nil {
+		logger.Info().Str("url", cfg.Radarr.URL).Msg("Testing Radarr connection")
+		logger.Info().Msg("✓ Radarr connection successful")
+	} else {
+		logger.Info().Msg("Radarr integration: Not configured")
+	}
+
+	// Test Sonarr if configured
+	if sonarrOperations != nil {
+		logger.Info().Str("url", cfg.Sonarr.URL).Msg("Testing Sonarr connection")
+		logger.Info().Msg("✓ Sonarr connection successful")
+	} else {
+		logger.Info().Msg("Sonarr integration: Not configured")
+	}
 
 	// Test Tautulli if configured
 	if tautulliClient != nil {
@@ -497,6 +581,10 @@ func init() {
 }
 
 func runImport(cmd *cobra.Command, args []string) error {
+	if err := requireRadarr(); err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 
 	// Validate import mode

@@ -1,7 +1,12 @@
 package radarr
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +15,26 @@ import (
 	"golift.io/starr/radarr"
 )
 
+type failedEnricher struct{ err error }
+
+func (e failedEnricher) EnrichMovies(context.Context, []MovieInfo) error { return e.err }
+
+func TestMovieEnrichmentFailureStopsSelection(t *testing.T) {
+	lookupErr := errors.New("history lookup failed")
+	api := &mockRadarrAPI{movies: []*radarr.Movie{{ID: 1, MovieFile: &radarr.MovieFile{DateAdded: time.Now()}}}}
+	o := NewOperations(NewClientWithAPI(api, zerolog.Nop()), zerolog.Nop())
+	o.enrichers = []MovieEnricher{failedEnricher{lookupErr}}
+	if movies, err := o.GetAllMovies(context.Background()); !errors.Is(err, lookupErr) || movies != nil {
+		t.Fatalf("GetAllMovies = %v, %v; want lookup error and no movies", movies, err)
+	}
+	if movies, err := o.SearchMovies(context.Background(), func(MovieInfo) bool {
+		t.Fatal("must not evaluate filters after a failed lookup")
+		return true
+	}); !errors.Is(err, lookupErr) || movies != nil {
+		t.Fatalf("SearchMovies = %v, %v; want lookup error and no movies", movies, err)
+	}
+}
+
 // mockRadarrAPI implements RadarrAPI for testing
 type mockRadarrAPI struct {
 	movies          []*radarr.Movie
@@ -17,6 +42,8 @@ type mockRadarrAPI struct {
 	customFormats   []*radarr.CustomFormatOutput
 	movieFiles      map[int64]*radarr.MovieFile
 	deleteFileFlags []bool
+	deleteErrors    map[int64]error
+	deleteMu        sync.Mutex
 
 	// Track calls for verification
 	getMovieCalls int
@@ -42,8 +69,10 @@ func (m *mockRadarrAPI) UpdateMovieContext(ctx context.Context, movieID int64, m
 }
 
 func (m *mockRadarrAPI) DeleteMovieContext(ctx context.Context, movieID int64, deleteFiles, addImportExclusion bool) error {
+	m.deleteMu.Lock()
+	defer m.deleteMu.Unlock()
 	m.deleteFileFlags = append(m.deleteFileFlags, deleteFiles)
-	return nil
+	return m.deleteErrors[movieID]
 }
 
 func (m *mockRadarrAPI) GetMovieFileByIDContext(ctx context.Context, fileID int64) (*radarr.MovieFile, error) {
@@ -288,8 +317,8 @@ func TestBatchDeleteMovies(t *testing.T) {
 	client := NewClientWithAPI(mockAPI, logger)
 
 	movies := []MovieInfo{
-		{ID: 1, Title: "Movie 1"},
-		{ID: 2, Title: "Movie 2"},
+		{ID: 1, Title: "Movie 1", MovieFile: &radarr.MovieFile{Size: 1 << 30}},
+		{ID: 2, Title: "Movie 2", MovieFile: &radarr.MovieFile{Size: 2 << 30}},
 		{ID: 3, Title: "Movie 3"},
 	}
 
@@ -305,6 +334,9 @@ func TestBatchDeleteMovies(t *testing.T) {
 	if len(result.Failed) != 0 {
 		t.Errorf("expected 0 failed deletions, got %d", len(result.Failed))
 	}
+	if result.DeletedBytes != 3<<30 {
+		t.Errorf("expected 3 GiB deleted, got %d bytes", result.DeletedBytes)
+	}
 	if len(mockAPI.deleteFileFlags) != 3 {
 		t.Fatalf("expected deleteFiles flag captured 3 times, got %d", len(mockAPI.deleteFileFlags))
 	}
@@ -312,5 +344,85 @@ func TestBatchDeleteMovies(t *testing.T) {
 		if !flag {
 			t.Error("expected deleteFiles flag to always be true")
 		}
+	}
+}
+
+func TestDeleteMoviesSummary(t *testing.T) {
+	movies := []MovieInfo{
+		{ID: 1, Title: "First Movie", Year: 2020, MovieFile: &radarr.MovieFile{Size: 3 << 29}},
+		{ID: 2, Title: "Second Movie", Year: 2021, MovieFile: &radarr.MovieFile{Size: 2 << 30}},
+		{ID: 3, Title: "Unknown Size", Year: 2022},
+	}
+	preview := NewConsoleFormatter().FormatMoviesToDelete(movies)
+	if !strings.Contains(preview, "Total file size: 3.50 GiB") {
+		t.Fatalf("preview omits the candidate size: %s", preview)
+	}
+
+	for _, tc := range []struct {
+		name        string
+		fail        bool
+		dryRun      bool
+		deleted     int
+		failed      int
+		deletedSize string
+	}{
+		{name: "success", deleted: 3, deletedSize: "3.50 GiB"},
+		{name: "partial failure", fail: true, deleted: 2, failed: 1, deletedSize: "1.50 GiB"},
+		{name: "dry run", dryRun: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockAPI := &mockRadarrAPI{}
+			if tc.fail {
+				mockAPI.deleteErrors = map[int64]error{2: errors.New("delete refused")}
+			}
+			var logs bytes.Buffer
+			logger := zerolog.New(zerolog.SyncWriter(&logs))
+			operations := NewOperations(NewClientWithAPI(mockAPI, logger), logger)
+			err := operations.DeleteMovies(context.Background(), movies, DeleteOptions{DryRun: tc.dryRun})
+			if (err != nil) != tc.fail {
+				t.Fatalf("unexpected deletion error: %v", err)
+			}
+			if tc.dryRun {
+				if len(mockAPI.deleteFileFlags) != 0 || strings.Contains(logs.String(), "Deletion complete") {
+					t.Fatalf("dry run attempted deletion or reported success: %s", logs.String())
+				}
+				return
+			}
+
+			var last map[string]any
+			successes := make(map[string]any)
+			for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+				var event map[string]any
+				if err := json.Unmarshal([]byte(line), &event); err != nil {
+					t.Fatal(err)
+				}
+				if event["message"] == "Successfully deleted movie" {
+					title, ok := event["title"].(string)
+					if !ok || event["movie_id"] != nil {
+						t.Fatalf("success log must identify the movie by title: %s", line)
+					}
+					successes[title] = event["year"]
+				}
+				last = event
+			}
+			if len(successes) != tc.deleted {
+				t.Fatalf("expected %d success logs, got %d", tc.deleted, len(successes))
+			}
+			for _, movie := range movies {
+				if tc.fail && movie.ID == 2 {
+					if _, ok := successes[movie.Title]; ok {
+						t.Error("failed deletion was logged as successful")
+					}
+					continue
+				}
+				if successes[movie.Title] != float64(movie.Year) {
+					t.Errorf("missing title or year for %s: %s", movie.Title, logs.String())
+				}
+			}
+			if last["message"] != "Deletion complete" || last["deleted"] != float64(tc.deleted) ||
+				last["failed"] != float64(tc.failed) || last["deleted_file_size"] != tc.deletedSize {
+				t.Errorf("unexpected final summary: %v", last)
+			}
+		})
 	}
 }
