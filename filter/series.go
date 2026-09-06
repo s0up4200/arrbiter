@@ -32,8 +32,7 @@ func ParseAndCreateSeriesFilter(expression string) (func(sonarr.SeriesInfo) bool
 	}
 
 	program, err := expr.Compile(expression,
-		expr.Env(createHelperFunctions()),
-		expr.AllowUndefinedVariables(),
+		expr.Env(createSeriesRuntimeEnvironment(sonarr.SeriesInfo{})),
 		expr.AsBool(),
 	)
 	if err != nil {

@@ -97,8 +97,6 @@ func (c *Client) DeleteMovie(ctx context.Context, movieID int64) error {
 		return fmt.Errorf("failed to delete movie ID %d: %w", movieID, err)
 	}
 
-	c.logger.Info().Int64("movie_id", movieID).
-		Msg("Successfully deleted movie")
 	return nil
 }
 

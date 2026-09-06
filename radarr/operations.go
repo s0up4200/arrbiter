@@ -95,7 +95,7 @@ func (o *Operations) GetAllMovies(ctx context.Context) ([]MovieInfo, error) {
 	// Enrich movies from all configured sources concurrently
 	if len(o.enrichers) > 0 {
 		if err := o.client.EnrichMoviesFromMultipleSources(ctx, results, o.enrichers...); err != nil {
-			o.logger.Warn().Err(err).Msg("Failed to enrich movies from all sources")
+			return nil, err
 		}
 	}
 
@@ -126,7 +126,7 @@ func (o *Operations) SearchMovies(ctx context.Context, filterFunc func(MovieInfo
 	// Enrich movies from all configured sources concurrently
 	if len(o.enrichers) > 0 {
 		if err := o.client.EnrichMoviesFromMultipleSources(ctx, movieInfos, o.enrichers...); err != nil {
-			o.logger.Warn().Err(err).Msg("Failed to enrich movies from all sources")
+			return nil, err
 		}
 	}
 
@@ -175,11 +175,6 @@ func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts 
 	// Use concurrent batch deletion
 	result := o.client.BatchDeleteMovies(ctx, movies)
 
-	o.logger.Info().
-		Int("deleted", len(result.Successful)).
-		Int("failed", len(result.Failed)).
-		Msg("Deletion complete")
-
 	// Log individual failures
 	for _, failure := range result.Failed {
 		o.logger.Error().
@@ -188,6 +183,12 @@ func (o *Operations) DeleteMovies(ctx context.Context, movies []MovieInfo, opts 
 			Str("title", failure.MovieTitle).
 			Msg("Failed to delete movie")
 	}
+
+	o.logger.Info().
+		Int("deleted", len(result.Successful)).
+		Int("failed", len(result.Failed)).
+		Str("deleted_file_size", fmt.Sprintf("%.2f GiB", float64(result.DeletedBytes)/(1<<30))).
+		Msg("Deletion complete")
 
 	if len(result.Failed) > 0 {
 		return fmt.Errorf("failed to delete %d movies", len(result.Failed))

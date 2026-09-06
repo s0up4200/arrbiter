@@ -73,10 +73,10 @@ func (o *Operations) GetAllSeries(ctx context.Context) ([]SeriesInfo, error) {
 	}
 
 	if err := o.enrichWatchData(ctx, results); err != nil {
-		o.logger.Warn().Err(err).Msg("Failed to enrich series with watch data")
+		return nil, fmt.Errorf("enrich series watch data: %w", err)
 	}
 	if err := o.enrichRequestData(ctx, results); err != nil {
-		o.logger.Warn().Err(err).Msg("Failed to enrich series with request data")
+		return nil, fmt.Errorf("enrich series request data: %w", err)
 	}
 
 	sort.Slice(results, func(i, j int) bool {
@@ -93,8 +93,22 @@ func (o *Operations) enrichWatchData(ctx context.Context, series []SeriesInfo) e
 	}
 
 	identifiers := make([]tautulli.SeriesIdentifier, 0, len(series))
-	for _, s := range series {
-		identifiers = append(identifiers, tautulli.SeriesIdentifier{Title: s.Title, Year: s.Year})
+	for i, s := range series {
+		episodes, err := o.client.GetEpisodes(ctx, s.ID)
+		if err != nil {
+			return err
+		}
+		available := make(map[tautulli.EpisodeKey]bool)
+		for _, episode := range episodes {
+			if episode.HasFile && episode.EpisodeFileID > 0 {
+				available[tautulli.EpisodeKey{Season: episode.SeasonNumber, Episode: episode.EpisodeNumber}] = true
+			}
+		}
+		series[i].EpisodeCount = len(available)
+		identifiers = append(identifiers, tautulli.SeriesIdentifier{
+			ID: s.ID, Title: s.Title, Year: s.Year, TvdbID: s.TvdbID, IMDBID: s.IMDBID,
+			AvailableEpisodes: available,
+		})
 	}
 
 	statuses, err := o.tautulliClient.BatchGetSeriesWatchStatus(ctx, identifiers, o.minWatchPercent)
@@ -103,7 +117,7 @@ func (o *Operations) enrichWatchData(ctx context.Context, series []SeriesInfo) e
 	}
 
 	for i := range series {
-		status, ok := statuses[series[i].Title]
+		status, ok := statuses[series[i].ID]
 		if !ok || status == nil {
 			continue
 		}
@@ -112,13 +126,13 @@ func (o *Operations) enrichWatchData(ctx context.Context, series []SeriesInfo) e
 		series[i].WatchCount = status.WatchCount
 		series[i].LastWatched = status.LastWatched
 		series[i].WatchProgress = episodeProgress(status.WatchedEpisodes, series[i].EpisodeCount)
-		series[i].Watched = series[i].WatchProgress >= o.minWatchPercent
+		series[i].Watched = series[i].EpisodeCount > 0 && series[i].WatchProgress >= o.minWatchPercent
 
 		for username, userData := range status.UserData {
 			progress := episodeProgress(userData.WatchedEpisodes, series[i].EpisodeCount)
 			series[i].UserWatchData[username] = &UserWatchInfo{
 				Username:        userData.Username,
-				Watched:         progress >= o.minWatchPercent,
+				Watched:         series[i].EpisodeCount > 0 && progress >= o.minWatchPercent,
 				WatchedEpisodes: userData.WatchedEpisodes,
 				WatchCount:      userData.WatchCount,
 				LastWatched:     userData.LastWatched,

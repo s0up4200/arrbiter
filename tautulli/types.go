@@ -40,20 +40,21 @@ type HistoryRecord struct {
 	FullTitle string          `json:"full_title"`
 	MediaType string          `json:"media_type"`
 	// Episode-specific fields (media_type == "episode")
-	GrandparentTitle string          `json:"grandparent_title"`  // Show title
-	ParentMediaIndex json.RawMessage `json:"parent_media_index"` // Season number (string or number)
-	MediaIndex       json.RawMessage `json:"media_index"`        // Episode number (string or number)
-	ThumbURL         string          `json:"thumb"`
-	GUID             string          `json:"guid"`
-	Date             int64           `json:"date"`             // Unix timestamp when watched
-	Started          int64           `json:"started"`          // Unix timestamp when started
-	Stopped          int64           `json:"stopped"`          // Unix timestamp when stopped
-	Duration         int             `json:"duration"`         // Duration in seconds
-	PercentComplete  int             `json:"percent_complete"` // Percentage watched (0-100)
-	WatchedStatus    float64         `json:"watched_status"`   // Plex's watched status (0.0-1.0)
-	ViewOffset       int             `json:"view_offset"`      // Seconds watched
-	IMDbID           string          `json:"imdb_id"`
-	TMDbID           string          `json:"tmdb_id"`
+	GrandparentTitle     string          `json:"grandparent_title"` // Show title
+	GrandparentRatingKey json.RawMessage `json:"grandparent_rating_key"`
+	ParentMediaIndex     json.RawMessage `json:"parent_media_index"` // Season number (string or number)
+	MediaIndex           json.RawMessage `json:"media_index"`        // Episode number (string or number)
+	ThumbURL             string          `json:"thumb"`
+	GUID                 string          `json:"guid"`
+	Date                 int64           `json:"date"`             // Unix timestamp when watched
+	Started              int64           `json:"started"`          // Unix timestamp when started
+	Stopped              int64           `json:"stopped"`          // Unix timestamp when stopped
+	Duration             int             `json:"duration"`         // Duration in seconds
+	PercentComplete      int             `json:"percent_complete"` // Percentage watched (0-100)
+	WatchedStatus        float64         `json:"watched_status"`   // Plex's watched status (0.0-1.0)
+	ViewOffset           int             `json:"view_offset"`      // Seconds watched
+	IMDbID               string          `json:"imdb_id"`
+	TMDbID               string          `json:"tmdb_id"`
 }
 
 // GetWatchedTime returns the time when the item was watched.
@@ -71,19 +72,23 @@ func (h *HistoryRecord) IsWatched(minPercentage float64) bool {
 
 // GetRatingKey safely extracts the rating key as a string.
 func (h *HistoryRecord) GetRatingKey() string {
-	if len(h.RatingKey) == 0 {
+	return parseRatingKey(h.RatingKey)
+}
+
+func parseRatingKey(raw json.RawMessage) string {
+	if len(raw) == 0 {
 		return ""
 	}
 
 	// Try to parse as string first
 	var str string
-	if err := json.Unmarshal(h.RatingKey, &str); err == nil {
+	if err := json.Unmarshal(raw, &str); err == nil {
 		return str
 	}
 
 	// Try to parse as number
 	var num float64
-	if err := json.Unmarshal(h.RatingKey, &num); err == nil {
+	if err := json.Unmarshal(raw, &num); err == nil {
 		return strconv.FormatFloat(num, 'f', -1, 64)
 	}
 
@@ -147,8 +152,12 @@ func rawToInt(raw json.RawMessage) int {
 
 // SeriesIdentifier contains the identifiers used to look up a series in Tautulli.
 type SeriesIdentifier struct {
-	Title string // Series title for matching against grandparent_title
-	Year  int
+	ID                int64
+	Title             string // Series title for matching against grandparent_title
+	Year              int
+	TvdbID            int64
+	IMDBID            string
+	AvailableEpisodes map[EpisodeKey]bool
 }
 
 // UserSeriesWatchData contains per-user watch data for a series.

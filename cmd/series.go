@@ -42,8 +42,7 @@ func evaluateSeriesFilters(ctx context.Context) (map[string][]sonarr.SeriesInfo,
 
 		filterFunc, err := filter.ParseAndCreateSeriesFilter(filterExpr)
 		if err != nil {
-			logger.Error().Err(err).Str("filter", filterName).Msg("Invalid TV filter expression")
-			continue
+			return nil, nil, fmt.Errorf("invalid TV filter %q: %w", filterName, err)
 		}
 
 		for _, series := range allSeries {

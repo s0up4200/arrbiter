@@ -86,7 +86,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	if cfg.Radarr.URL != "" && cfg.Radarr.APIKey != "" {
 		radarrClient, err := radarr.NewClient(cfg.Radarr.URL, cfg.Radarr.APIKey, logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to create Radarr client, continuing without movie support")
+			return fmt.Errorf("initialize Radarr: %w", err)
 		} else {
 			operations = radarr.NewOperations(radarrClient, logger)
 			logger.Info().Msg("Radarr integration enabled")
@@ -97,7 +97,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	if cfg.Sonarr.URL != "" && cfg.Sonarr.APIKey != "" {
 		sonarrClient, err := sonarr.NewClient(cfg.Sonarr.URL, cfg.Sonarr.APIKey, logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to create Sonarr client, continuing without series support")
+			return fmt.Errorf("initialize Sonarr: %w", err)
 		} else {
 			sonarrOperations = sonarr.NewOperations(sonarrClient, logger)
 			logger.Info().Msg("Sonarr integration enabled")
@@ -108,7 +108,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	if cfg.Tautulli.URL != "" && cfg.Tautulli.APIKey != "" {
 		tautulliClient, err = tautulli.NewClient(cfg.Tautulli.URL, cfg.Tautulli.APIKey, logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to create Tautulli client, continuing without watch status")
+			return fmt.Errorf("initialize Tautulli: %w", err)
 		} else {
 			for _, sink := range enrichmentSinks() {
 				sink.SetTautulliClient(tautulliClient)
@@ -122,7 +122,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	if cfg.Overseerr.URL != "" && cfg.Overseerr.APIKey != "" {
 		overseerrClient, err = overseerr.NewClient(cfg.Overseerr.URL, cfg.Overseerr.APIKey, logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to create Overseerr client, continuing without request data")
+			return fmt.Errorf("initialize Overseerr: %w", err)
 		} else {
 			for _, sink := range enrichmentSinks() {
 				sink.SetOverseerrClient(overseerrClient)

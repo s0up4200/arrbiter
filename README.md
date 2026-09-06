@@ -39,6 +39,9 @@ arrbiter delete --dry-run
 arrbiter delete
 ```
 
+Movie deletion logs show each title and release year. The final summary reports successful and failed deletions and the known file size removed by successful deletions.
+Dry runs and confirmation prompts show the candidate file-size total. These totals use Radarr metadata. Hardlinks and the Radarr recycle bin can retain disk data after deletion.
+
 ## Key Features
 
 - **Smart Cleanup**: Remove unwatched, low-rated, or old content automatically
@@ -289,6 +292,11 @@ Series filters use the same helper names as movie filters (`hasTag`, `watchedBy`
 episode-based: a user "watched" a series when they've seen at least `min_watch_percent`
 of the episodes on disk.
 
+An episode counts as watched only when its completion percentage reaches that threshold.
+Progress includes only episodes that still have files in Sonarr. Plays of removed episodes
+still count toward `LastWatched` and `WatchCount`. Shows are matched by TVDB or IMDb ID,
+with title and year as a fallback. Missing or ambiguous Plex show metadata stops the run.
+
 ```bash
 # Series properties
 Title, Year, Added, Ended, Status        # Status: continuing, ended, upcoming
@@ -308,6 +316,8 @@ lastWatchedBy("user")        # Time of the user's last episode play (zero if nev
 ```
 
 Movie-only helpers (ratings, hardlink data) are not available in `filter_tv` expressions.
+Invalid TV filters stop the run. Connection failures for configured Radarr, Sonarr,
+Tautulli, or Overseerr services also stop the run, as do failed watch or request lookups.
 
 ## Filter Expression Syntax
 

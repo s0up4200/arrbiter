@@ -90,7 +90,9 @@ func TestSeriesFilterEmptyExpression(t *testing.T) {
 }
 
 func TestSeriesFilterInvalidExpression(t *testing.T) {
-	if _, err := ParseAndCreateSeriesFilter("Title =="); err == nil {
-		t.Error("invalid expression should fail to compile")
+	for _, expression := range []string{"Title ==", "imdbRating() < 8", "IsHardlinked", "UnknownField == 1"} {
+		if _, err := ParseAndCreateSeriesFilter(expression); err == nil {
+			t.Errorf("%q must fail to compile", expression)
+		}
 	}
 }

@@ -43,6 +43,15 @@ func (c *Client) GetAllSeries(ctx context.Context) ([]*sonarr.Series, error) {
 	return series, nil
 }
 
+// GetEpisodes retrieves the episodes known to Sonarr for one series.
+func (c *Client) GetEpisodes(ctx context.Context, seriesID int64) ([]*sonarr.Episode, error) {
+	episodes, err := c.api.GetSeriesEpisodesContext(ctx, &sonarr.GetEpisode{SeriesID: seriesID})
+	if err != nil {
+		return nil, fmt.Errorf("get episodes for series %d: %w", seriesID, err)
+	}
+	return episodes, nil
+}
+
 // GetTags retrieves all tags from Sonarr
 func (c *Client) GetTags(ctx context.Context) ([]*starr.Tag, error) {
 	tags, err := c.api.GetTagsContext(ctx)
